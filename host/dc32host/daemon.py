@@ -97,7 +97,8 @@ class Daemon:
         self.on_frame_acked = None    # (frame_id, t_ack)
         self._ex_title = [re.compile(p) for p in cfg.get("exclude_titles", [])]
         self._ex_proc = {p.lower() for p in cfg.get("exclude_processes", [])}
-        self.view = "mirror"          # mirror | runner | paused
+        self.view = "mirror"          # mirror | runner | paused | help
+        self.prev_view = "mirror"
         self.runner = None            # lazily created runner_view.RunnerView
         self._runner_img = (0.0, None)
         self.zoom_user = self.vp.zoom # what the user picked; per-app and typing zoom override it
@@ -301,6 +302,8 @@ class Daemon:
             self.set_view("mirror" if (name == "toggle_runner" and self.view == "runner") else "runner")
         elif name in ("view_mirror", "resume"):
             self.set_view("mirror")
+        elif name in ("help", "toggle_help"):
+            self.set_view(self.prev_view if self.view == "help" else "help")
         elif name in ("pause", "toggle_pause"):
             self.set_view("mirror" if self.view == "paused" else "paused")
         elif name == "badge_terminal":
@@ -356,11 +359,14 @@ class Daemon:
 
     # ================================================================ views + home menu
     def set_view(self, view):
+        if view == "help" and self.view != "help":
+            self.prev_view = self.view
         self.view = view
         if view == "runner":
             self._runner()                 # starts the background fetch on first use
-        self.say({"mirror": "Mirroring screen", "runner": "Runner costs", "paused": "Display paused"}[view],
-                 *(["FN: menu"] if view != "mirror" else []))
+        if view != "help":
+            self.say({"mirror": "Mirroring screen", "runner": "Runner costs", "paused": "Display paused"}[view],
+                     *(["FN: menu"] if view != "mirror" else []))
         self.vp.reset()
         self.force_refresh()
 
@@ -408,6 +414,7 @@ class Daemon:
             (f"Zoom: {self.vp.zoom} (A cycles)", "zoom_cycle", False),
             ("Open dashboard on PC", "open_dashboard", False),
             ("Resume display" if self.view == "paused" else "Pause display", "toggle_pause", self.view == "paused"),
+            ("Shortcuts (Ctrl+Alt+H)", "toggle_help", self.view == "help"),
             ("Status info", "info", False),
         ]
         entries, self.menu_table = [], {}
@@ -491,6 +498,9 @@ class Daemon:
                 return
         elif "fn" in ev.held:
             self.fn_used_as_modifier = True
+        if self.view == "help" and ev.button == "b" and ev.event == "short":
+            self.set_view(self.prev_view)
+            return
         prefix = "fn+" if ev.fn_held else ""
         key = f"{prefix}{ev.button}.{ev.event}"
         act = self.cfg["buttons"].get(key)
@@ -573,6 +583,9 @@ class Daemon:
             return time.time(), C.placeholder(["Display paused", "FN: menu  |  FN > Resume"]), False
         if self.view == "runner":
             return time.time(), self.runner_frame(), False
+        if self.view == "help":
+            from . import help_view
+            return time.time(), help_view.render(), False
         src_wi = self.pick_source()
         changed_src = (src_wi.handle if src_wi else None) != (self.shown.handle if self.shown else None)
         if changed_src:
@@ -779,7 +792,12 @@ class Daemon:
                     time.sleep(1.0)
                     continue
             try:
+                t0 = time.time()
                 self.tick()
+                dt = time.time() - t0
+                if dt > 1.5:      # the badge shows "disconnected" after 3 s of silence; find what stalls
+                    log.warning("slow tick: %.1f s (view=%s, shown=%s)", dt, self.view,
+                                self.shown.title[:40] if self.shown else None)
             except Disconnected as e:
                 log.warning("badge disconnected: %s", e)
                 self.badge.close()

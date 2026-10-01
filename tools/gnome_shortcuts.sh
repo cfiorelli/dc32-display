@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # GNOME keyboard shortcuts for the badge (user-level, no sudo). Re-running is safe; --remove undoes them.
 #   Ctrl+Alt+B        runner costs view <-> screen mirroring
+#   Ctrl+Alt+H        cheat sheet of all shortcuts on the badge
 #   Ctrl+Alt+Z        zoom: fit -> 2:1 -> 1:1        (B on the badge / Ctrl+Alt+X: back to fit)
 #   Ctrl+Alt+I/J/K/L  move the badge view up/left/down/right (when zoomed)
 set -euo pipefail
@@ -9,6 +10,7 @@ BASE=/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings
 BIN="$HOME/.local/bin/dc32host"
 KEYS=(
   "dc32-runner|DC32 badge: runner view / mirror|<Primary><Alt>b|toggle_runner"
+  "dc32-help|DC32 badge: shortcut cheat sheet|<Primary><Alt>h|toggle_help"
   "dc32-zoom|DC32 badge: zoom|<Primary><Alt>z|zoom_cycle"
   "dc32-fit|DC32 badge: fit whole window|<Primary><Alt>x|zoom_fit"
   "dc32-up|DC32 badge: view up|<Primary><Alt>i|pan_up"

@@ -1,5 +1,7 @@
 # dc32-display
 
+![DEF CON 32 badge on a wooden stand, mirroring a terminal over USB](docs/img/badge.jpg)
+
 Turns a **DEF CON 32 Human Badge** (RP2350, 320×240 LCD) into a live USB mini-display and
 controller for a Linux PC. It mirrors the app you're using (and follows your typing at 1:1, so text
 is readable), has a badge-native home menu and app switcher, and can show a badge-native GitHub
@@ -11,16 +13,19 @@ Actions runner cost view.
  window mgmt  ◄─ button actions ◄────────────── BUTTON / MENU_RESULT / ACK ◄── buttons, menus
 ```
 
-## Photos
+## Screens
 
-<!-- Add photos here, e.g. docs/img/badge-terminal.jpg, docs/img/runner-view.jpg -->
-_Photos coming soon: the badge mirroring a terminal at 1:1, the runner cost view, the home menu._
+| Runner cost view (A-hold / Ctrl+Alt+B) | Shortcut cheat sheet (Ctrl+Alt+H) |
+|---|---|
+| ![Runner cost view: runner busy, cost per 30 min for GitHub-hosted vs self-hosted](docs/img/runner-view.png) | ![Cheat sheet of keyboard shortcuts and badge buttons](docs/img/cheat-sheet.png) |
+
+Both are drawn natively at the badge's 320×240 (shown here at 2×; the runner view uses demo data).
 
 ## Buttons
 
 | Control | Action |
 |---|---|
-| **FN** (center) tap | home menu: Mirror screen · Runner costs · Badge terminal · Switch app · Zoom · Open dashboard on PC · Pause · Status info |
+| **FN** (center) tap | home menu: Mirror screen · Runner costs · Badge terminal · Switch app · Zoom · Open dashboard on PC · Pause · Shortcuts · Status info |
 | **A** tap | zoom: fit → 2:1 → 1:1 (zoomed views follow your typing or the mouse) |
 | **A** hold | runner cost view on/off |
 | **B** tap | back to fit (and back/cancel in menus) |
@@ -44,6 +49,7 @@ All mappings live in `~/.config/dc32-display/config.json` (`"buttons"`).
 | Keys | Action |
 |---|---|
 | Ctrl+Alt+B | runner cost view ↔ screen mirroring |
+| Ctrl+Alt+H | cheat sheet of every shortcut, on the badge |
 | Ctrl+Alt+Z / Ctrl+Alt+X | zoom cycle / fit |
 | Ctrl+Alt+I / J / K / L | move the badge view up / left / down / right |
 
