@@ -1,0 +1,6 @@
+firmware/build/
+__pycache__/
+*.pyc
+backups/*/
+!backups/README.md
+dist/
