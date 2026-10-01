@@ -1,2 +1,0 @@
-[console_scripts]
-dc32host = dc32host.__main__:main

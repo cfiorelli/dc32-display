@@ -74,6 +74,12 @@ elif [ "${XDG_SESSION_TYPE:-}" = "wayland" ]; then
   echo "   (or re-run: host/install_linux.sh --xorg  to make Xorg the default)"
 fi
 
+# picotool for backup/flash/restore (official build, checksum-verified; not bundled in the repo)
+python3 "$ROOT/tools/get_picotool.py" || echo "!! picotool download failed; run tools/get_picotool.py later"
+
+# Ctrl+Alt+B: runner view <-> mirroring (GNOME only; tools/gnome_shortcuts.sh --remove undoes it)
+command -v gsettings >/dev/null && "$ROOT/tools/gnome_shortcuts.sh" || true
+
 pkill -f "$DATA/run.sh" 2>/dev/null || true
 pkill -f "dc32host run" 2>/dev/null || true
 nohup "$DATA/run.sh" >/dev/null 2>&1 &

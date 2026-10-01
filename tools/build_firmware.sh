@@ -24,7 +24,7 @@ cp "$B/dc32_display.uf2" "$B/dc32_display.elf" "$B/dc32_display.bin" "$D/"
   echo "git: $(git -C "$ROOT" rev-parse HEAD 2>/dev/null || echo none)"
   echo "pico-sdk: $(git -C "$PICO_SDK_PATH" describe --tags 2>/dev/null || echo unknown)"
   echo "toolchain: $(arm-none-eabi-gcc --version | head -1)"
-  arm-none-eabi-size "$B/dc32_display.elf"
+  (cd "$ROOT" && arm-none-eabi-size firmware/build/dc32_display.elf)
 } > "$D/BUILDINFO.txt"
 # static checks: native decoder/encoder round-trip tests
 python3 "$ROOT/tests/test_protocol.py"

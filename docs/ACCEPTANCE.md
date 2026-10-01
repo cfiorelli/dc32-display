@@ -6,26 +6,26 @@ the Dell + badge (run book below).
 
 | # | Test | Status | How (on the Dell) |
 |---|---|---|---|
-| 1 | Verified full-flash backup of original firmware | PENDING (tool tested vs fake picotool) | `python tools/badgetool.py backup` |
+| 1 | Verified full-flash backup of original firmware | PASS (Dell; two identical reads + verify; program matched stock 1.31) | `python tools/badgetool.py backup` |
 | 2 | Recovery instructions exist | DONE | `RESTORE.md` |
-| 3 | Badge boots custom firmware | PENDING | `python tools/badgetool.py flash`; status screen shows "DC32 DISPLAY fw 0.1.0" |
-| 4 | Host detects badge automatically | SIM | start service; log shows `badge connected` |
-| 5 | Foreground app appears on badge | SIM | focus any app |
-| 6 | Badge follows app switches | SIM | Alt+Tab around |
-| 7 | Typing appears live | SIM (keypress→badge fb median 27 ms at 1:1, 46 ms fit) | type in a terminal with the wireless keyboard |
-| 8 | Terminal scrolling updates | SIM (≈29 updates/s) | `ping localhost` / `yes` |
-| 9 | Mouse cursor | SIM | move mouse over shown window |
+| 3 | Badge boots custom firmware | PASS (Dell, status screen + all 9 buttons) | `python tools/badgetool.py flash`; status screen shows "DC32 DISPLAY fw 0.1.0" |
+| 4 | Host detects badge automatically | PASS (Dell) | start service; log shows `badge connected` |
+| 5 | Foreground app appears on badge | PASS (Dell, `tests/hw_dell.py`) | focus any app |
+| 6 | Badge follows app switches | PASS (Dell) | Alt+Tab around |
+| 7 | Typing appears live | PASS (Dell: keypress→badge ACK median 72 ms 1:1, 84 ms fit) | type in a terminal with the wireless keyboard |
+| 8 | Terminal scrolling updates | PASS (Dell, 30 ACKed frames/s) | `ping localhost` / `yes` |
+| 9 | Mouse cursor | PASS (Dell) | move mouse over shown window |
 | 10 | START opens app list | SIM (host side) | press START |
 | 11 | Navigate list with badge | PENDING (firmware-local) | Up/Down |
 | 12 | Selecting focuses app | SIM | A |
-| 13 | Quick previous/next switching | SIM | SELECT short ×2 |
-| 14 | Dashboard shortcut (focus if running, start if not) | SIM (stand-in dashboard, both cases) | hold A; run `dc32host find-dashboard --write` first |
-| 15 | Pinned mode | SIM | hold SELECT once |
-| 16 | Whole-desktop mode | SIM | hold SELECT twice |
+| 13 | Quick previous/next switching | PASS (Dell, host action) | SELECT short ×2 |
+| 14 | Dashboard shortcut (focus if running, start if not) | PARTIAL (Dell: start-if-not-running PASS; focus-if-running FAIL, open) | hold A; run `dc32host find-dashboard --write` first |
+| 15 | Pinned mode | PASS (Dell, host action) | hold SELECT once |
+| 16 | Whole-desktop mode | PASS (Dell, host action) | hold SELECT twice |
 | 17 | Wireless keyboard/mouse unaffected | by design (no HID interface; D-pad never injects keys) | use them normally |
 | 18 | Unplug/replug recovery | SIM (host) / PENDING (USB) | unplug 5 s, replug |
-| 19 | Service starts after reboot | PENDING | reboot Dell |
-| 20 | FPS / throughput / latency measured | PENDING | `dc32host bench`, `dc32host latency-test`, FN overlay |
+| 19 | Service starts after reboot | PASS (Dell 2026-10-01: runner active, host autostarted, badge connected 30 s after login) | reboot Dell |
+| 20 | FPS / throughput / latency measured | PASS (Dell: raw 2.9 fps / 452 kB/s, decode 17.8 ms; small-update RTT 0.9 ms; latency-test median 48 ms, p95 79 ms) | `dc32host bench`, `dc32host latency-test`, FN overlay |
 
 ## Run book (once the Dell is reachable)
 

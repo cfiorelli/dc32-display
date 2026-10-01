@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import queue
 import re
 import sys
@@ -20,6 +21,16 @@ log = logging.getLogger("dc32.daemon")
 MODES = ["follow", "pinned", "desktop"]
 ZOOM_CYCLE = ["fit", "2x", "1x"]
 FAV_ID_BASE = 0x80000000
+HOME_ID_BASE = 0x40000000
+BASHRC = __import__("os").path.join(__import__("os").path.dirname(__file__), "badge_bashrc")
+
+
+def control_socket_path():
+    if os.name == "nt":
+        return None
+    base = os.environ.get("XDG_RUNTIME_DIR") or f"/tmp/dc32host-{os.getuid()}"
+    os.makedirs(base, mode=0o700, exist_ok=True)
+    return os.path.join(base, "dc32host.sock")
 
 
 def make_backend(cfg):
@@ -86,6 +97,74 @@ class Daemon:
         self.on_frame_acked = None    # (frame_id, t_ack)
         self._ex_title = [re.compile(p) for p in cfg.get("exclude_titles", [])]
         self._ex_proc = {p.lower() for p in cfg.get("exclude_processes", [])}
+        self.view = "mirror"          # mirror | runner | paused
+        self.runner = None            # lazily created runner_view.RunnerView
+        self._runner_img = (0.0, None)
+        self.zoom_user = self.vp.zoom # what the user picked; per-app and typing zoom override it
+        self.typing_until = 0.0
+        self.last_key_t = 0.0
+        self._in_mark = None
+        self.ctl_q: queue.Queue = queue.Queue()
+        self.last_badge_input = time.time()
+        self.dimmed = False
+        self._dim_check = 0.0
+
+    # ================================================================ local control (keyboard shortcuts)
+    def start_control(self):
+        """`dc32host ctl <action>` -> same actions as badge buttons (bind it to a desktop shortcut)."""
+        path = control_socket_path()
+        if not path:
+            return
+        import socket
+        import threading
+        try:
+            if os.path.exists(path):
+                os.unlink(path)
+            sock = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+            sock.bind(path)
+            os.chmod(path, 0o600)
+        except OSError as e:
+            log.warning("control socket unavailable: %s", e)
+            return
+
+        def loop():
+            while True:
+                try:
+                    data = sock.recv(256).decode("utf-8", "replace").strip()
+                except OSError:
+                    return
+                if re.fullmatch(r"[a-z0-9_:+.-]{1,64}", data):
+                    self.ctl_q.put(data)
+
+        threading.Thread(target=loop, daemon=True, name="ctl").start()
+
+    def idle_dim(self):
+        """LCD backlight saver: dim after `dim_after_s` without PC or badge input, wake on either.
+        (The panel is an LCD, so there is no burn-in; this saves the backlight and the room's darkness.)"""
+        now = time.time()
+        if now - self._dim_check < 1.0:
+            return
+        self._dim_check = now
+        after = float(self.cfg.get("dim_after_s", 600))
+        idle_ms = self.be._idle_ms() if hasattr(self.be, "_idle_ms") else None
+        pc_idle = (idle_ms / 1000.0) if idle_ms is not None else 0.0
+        idle = min(pc_idle, now - self.last_badge_input)
+        if after > 0 and idle > after and not self.dimmed:
+            self.dimmed = True
+            self.send(P.set_brightness(int(self.cfg.get("dim_brightness", 2))))
+        elif self.dimmed and idle < after:
+            self.dimmed = False
+            self.send(P.set_brightness(self.brightness))
+
+    def run_control(self):
+        while True:
+            try:
+                act = self.ctl_q.get_nowait()
+            except queue.Empty:
+                return
+            log.info("ctl: %s", act)
+            self._ctl_quiet = time.time() + 0.6   # the shortcut's own keypress is not "typing"
+            self.action(act)
 
     # ================================================================ helpers
     def excluded(self, wi) -> bool:
@@ -134,8 +213,12 @@ class Daemon:
                     return wi
         return None
 
-    @staticmethod
-    def _ancestor_pids(rx):
+    # processes that own many unrelated windows: an ancestor match on them says nothing
+    SHARED_WINDOW_OWNERS = re.compile(r"(?i)^(gnome-terminal-server|konsole|xfce4-terminal|tilix|terminator|"
+                                      r"mate-terminal|ptyxis|kgx|gnome-shell|explorer\.exe|windowsterminal\.exe)$")
+
+    @classmethod
+    def _ancestor_pids(cls, rx):
         try:
             import psutil
         except ImportError:
@@ -146,7 +229,8 @@ class Daemon:
                 if rx.search(" ".join(p.info["cmdline"] or [])):
                     out.add(p.pid)
                     for a in p.parents():
-                        out.add(a.pid)
+                        if not cls.SHARED_WINDOW_OWNERS.match(a.name() or ""):
+                            out.add(a.pid)
             except Exception:
                 continue
         return out
@@ -163,6 +247,7 @@ class Daemon:
             return
         if fav.get("launch"):
             spec = dict(fav["launch"])
+            spec["cmd"] = [BASHRC if a == "{badge_bashrc}" else a for a in spec.get("cmd") or []]
             spec.setdefault("title", fav["name"])
             if self.be.launch(spec):
                 self.pending_fav = (fav, time.time() + 15)
@@ -207,8 +292,20 @@ class Daemon:
             self.say("No previous app")
         elif name == "app_switcher":
             self.open_switcher()
-        elif name == "dashboard":
+        elif name in ("dashboard", "open_dashboard"):     # full terminal dashboard on the PC
+            self.view = "mirror"
             self.open_favorite(self.cfg.get("dashboard_favorite", "GitHub Runner Dashboard"))
+        elif name == "home_menu":
+            self.open_home()
+        elif name in ("view_runner", "toggle_runner"):
+            self.set_view("mirror" if (name == "toggle_runner" and self.view == "runner") else "runner")
+        elif name in ("view_mirror", "resume"):
+            self.set_view("mirror")
+        elif name in ("pause", "toggle_pause"):
+            self.set_view("mirror" if self.view == "paused" else "paused")
+        elif name == "badge_terminal":
+            self.view = "mirror"
+            self.open_favorite("Badge Terminal")
         elif name == "cycle_mode":
             i = (MODES.index(self.mode) + 1) % len(MODES)
             self.set_mode(MODES[i])
@@ -218,17 +315,22 @@ class Daemon:
             if self.shown:
                 self.be.focus(self.shown.handle)
         elif name == "zoom_cycle":
-            self.vp.zoom = ZOOM_CYCLE[(ZOOM_CYCLE.index(self.vp.zoom) + 1) % len(ZOOM_CYCLE)]
-            self.vp.reset()
-            self.say(f"Zoom: {self.vp.zoom}")
+            self.typing_until = 0.0
+            self.zoom_user = ZOOM_CYCLE[(ZOOM_CYCLE.index(self.vp.zoom) + 1) % len(ZOOM_CYCLE)]
+            self.vp.set_zoom(self.zoom_user)
+            self.say(f"Zoom: {self.zoom_user}")
         elif name == "zoom_fit":
-            if self.vp.zoom != "fit":
-                self.vp.zoom = "fit"
-                self.vp.reset()
+            self.typing_until = 0.0
+            if self.vp.zoom != "fit" or self.zoom_user != "fit":
+                self.zoom_user = "fit"
+                self.vp.set_zoom("fit")
                 self.say("Zoom: fit")
         elif name.startswith("pan_"):
             d = {"pan_up": (0, -1), "pan_down": (0, 1), "pan_left": (-1, 0), "pan_right": (1, 0)}[name]
             self.vp.pan(*d)
+        elif name == "restart":            # the autostart loop (run.sh) starts a fresh daemon in ~3 s
+            log.info("restart requested")
+            raise SystemExit(0)
         elif name == "info":
             self.info_until = time.time() + 4
         elif name == "refresh":
@@ -251,6 +353,70 @@ class Daemon:
             self.say("Mode: " + {"follow": "Follow active window", "desktop": "Whole desktop"}[mode])
         self.vp.reset()
         self.force_refresh()
+
+    # ================================================================ views + home menu
+    def set_view(self, view):
+        self.view = view
+        if view == "runner":
+            self._runner()                 # starts the background fetch on first use
+        self.say({"mirror": "Mirroring screen", "runner": "Runner costs", "paused": "Display paused"}[view],
+                 *(["FN: menu"] if view != "mirror" else []))
+        self.vp.reset()
+        self.force_refresh()
+
+    def _runner(self):
+        if self.runner is None:
+            from .runner_view import RunnerData, RunnerView
+            rv = self.cfg.get("runner_view") or {}
+            script = rv.get("script") or self._dashboard_script()
+            data = RunnerData(script, int(rv.get("refresh_s", 1800)))
+            data.start()
+            self.runner = RunnerView(data)
+        return self.runner
+
+    def _dashboard_script(self):
+        fav = self.favorite(self.cfg.get("dashboard_favorite", "GitHub Runner Dashboard")) or {}
+        for a in reversed((fav.get("launch") or {}).get("cmd") or []):
+            if str(a).endswith(".py"):
+                return a
+        raise RuntimeError("no dashboard script: run dc32host find-dashboard --write")
+
+    def runner_frame(self):
+        t, img = self._runner_img
+        if img is None or time.time() - t > 1.0:
+            try:
+                img = self._runner().render()
+            except Exception as e:
+                log.warning("runner view failed: %s", e)
+                img = C.placeholder(["Runner view unavailable", str(e)[:44]])
+            self._runner_img = (time.time(), img)
+        return img
+
+    def is_dashboard_window(self, wi) -> bool:
+        if wi is None or not self.cfg.get("runner_view_for_dashboard", True):
+            return False
+        fav = self.favorite(self.cfg.get("dashboard_favorite", "GitHub Runner Dashboard")) or {}
+        t = (fav.get("match") or {}).get("title")
+        return bool(t and re.search(t, wi.title or ""))
+
+    def open_home(self):
+        items = [
+            ("Mirror screen", "view_mirror", self.view == "mirror"),
+            ("Runner costs", "view_runner", self.view == "runner"),
+            ("Badge terminal", "badge_terminal", bool(self.shown and self.shown.title == "Badge Terminal")),
+            ("Switch app...", "app_switcher", False),
+            (f"Zoom: {self.vp.zoom} (A cycles)", "zoom_cycle", False),
+            ("Open dashboard on PC", "open_dashboard", False),
+            ("Resume display" if self.view == "paused" else "Pause display", "toggle_pause", self.view == "paused"),
+            ("Status info", "info", False),
+        ]
+        entries, self.menu_table = [], {}
+        for i, (label, act, on) in enumerate(items):
+            eid = HOME_ID_BASE | i
+            entries.append((eid, P.MENU_FLAG_ACTIVE if on else 0, label))
+            self.menu_table[eid] = ("action", act)
+        self.send(P.menu_list("DC32 Display", entries, 0))
+        self.menu_open_until = time.time() + 60
 
     # ================================================================ app switcher
     def open_switcher(self):
@@ -293,9 +459,13 @@ class Daemon:
         target = self.menu_table.get(r.entry_id)
         if target is None:
             return
+        if isinstance(target, tuple) and target[0] == "action":   # home menu entry
+            self.action(target[1])
+            return
         if isinstance(target, dict):           # favorite to launch
             self.open_favorite(target["name"])
             return
+        self.view = "mirror"
         if r.action == P.MENU_PIN:
             self.mode, self.pinned = "pinned", target.handle
             self.vp.reset()
@@ -305,6 +475,15 @@ class Daemon:
 
     # ================================================================ events
     def on_button(self, ev: P.ButtonEvent):
+        self.last_badge_input = time.time()
+        if self.dimmed:                      # a press on a dimmed badge only wakes the backlight
+            self.dimmed = False
+            self.send(P.set_brightness(self.brightness))
+            self._swallow = ev.button
+        if getattr(self, "_swallow", None) == ev.button:
+            if ev.event in ("short", "long"):
+                self._swallow = None
+            return
         if ev.button == "fn":
             if ev.event == "down":
                 self.fn_used_as_modifier = False
@@ -390,11 +569,18 @@ class Daemon:
         if getattr(self.be, "wayland", False):
             return time.time(), C.placeholder(["Wayland session: capture blocked", "Log out, click the gear icon,",
                                                "choose 'Ubuntu on Xorg', log in", "(or: install_linux.sh --xorg)"]), False
+        if self.view == "paused":
+            return time.time(), C.placeholder(["Display paused", "FN: menu  |  FN > Resume"]), False
+        if self.view == "runner":
+            return time.time(), self.runner_frame(), False
         src_wi = self.pick_source()
         changed_src = (src_wi.handle if src_wi else None) != (self.shown.handle if self.shown else None)
         if changed_src:
             self.vp.reset()
         self.shown = src_wi
+        if self.is_dashboard_window(src_wi):  # the terminal dashboard is unreadable at 320x240
+            return time.time(), self.runner_frame(), changed_src
+        self.apply_zoom(src_wi)
         t_cap = time.time()
         src, rect = None, None
         if src_wi is None:
@@ -425,13 +611,15 @@ class Daemon:
         if cur:
             if self.cursor_last[0] != (cur[0], cur[1]):
                 self.cursor_last = ((cur[0], cur[1]), now)
+        typing = now < self.typing_until
+        key_recent = now - self.last_key_t < 0.5    # changes this soon after a key are its echo
         if src_wi is not None and self.vp.zoom != "fit":
             car = self.be.caret(src_wi.handle) if hasattr(self.be, "caret") else None
             if car:
                 focus_pt = (car[0] - rect[0], car[1] - rect[1] + car[3])
-            elif cur and now - self.cursor_last[1] < 1.0:
+            elif cur and now - self.cursor_last[1] < 1.0 and not typing:   # typing beats the mouse
                 focus_pt = (cur[0] - rect[0], cur[1] - rect[1])
-        out, tf = self.vp.compose(src, key, focus_pt, tuple(self.cfg.get("letterbox_color", [0, 0, 0])))
+        out, tf = self.vp.compose(src, key, focus_pt, tuple(self.cfg.get("letterbox_color", [0, 0, 0])), key_recent)
 
         hide_after = float(self.cfg.get("cursor_only_when_moving_s", 3.0))
         if self.cfg.get("show_cursor", True) and cur and cur[2] and (hide_after <= 0 or now - self.cursor_last[1] < hide_after):
@@ -439,6 +627,39 @@ class Daemon:
             if 0 <= cx < C.OUT_W and 0 <= cy < C.OUT_H:
                 C.draw_cursor(out, cx, cy)
         return t_cap, out, changed_src
+
+    def apply_zoom(self, src_wi):
+        """Effective zoom = per-app zoom (e.g. Badge Terminal 1:1) > typing zoom > the user's choice."""
+        now = time.time()
+        mark, self._in_mark = self._in_mark, (self.be.input_mark() if hasattr(self.be, "input_mark") else None)
+        cur = self.be.cursor()
+        mouse_still = cur is None or self.cursor_last[0] == (cur[0], cur[1])
+        quiet = now < getattr(self, "_ctl_quiet", 0.0)
+        if mark is not None and mouse_still and not quiet and self.be.input_since(mark):
+            self.last_key_t = now
+            hold = float(self.cfg.get("typing_zoom_hold_s", 0))
+            self.typing_until = now + (hold if hold > 0 else 3.0)
+            if hold <= 0 and self.zoom_user == "fit" and self.cfg.get("typing_zoom"):
+                # no timeout: typing zooms in and it stays until B (zoom_fit), user's call
+                self.zoom_user = self.cfg["typing_zoom"]
+                self.say(f"Zoom {self.zoom_user} (B: fit)")
+        want = self.zoom_user
+        fav = self.app_favorite(src_wi)
+        if fav and fav.get("zoom"):
+            want = fav["zoom"]
+        elif now < self.typing_until and self.zoom_user == "fit" and self.cfg.get("typing_zoom"):
+            want = self.cfg["typing_zoom"]
+        if want != self.vp.zoom:
+            self.vp.set_zoom(want)
+
+    def app_favorite(self, wi):
+        if wi is None:
+            return None
+        for f in self.cfg.get("favorites", []):
+            t = (f.get("match") or {}).get("title")
+            if f.get("zoom") and t and re.search(t, wi.title or ""):
+                return f
+        return None
 
     def overlays(self, out):
         now = time.time()
@@ -459,6 +680,8 @@ class Daemon:
         return out
 
     def tick(self):
+        self.run_control()
+        self.idle_dim()
         now = time.time()
         if self.menu_open_until and now < self.menu_open_until:
             if now - self.last_ping > 1.0:
@@ -516,6 +739,8 @@ class Daemon:
 
         active = time.time() - self.last_change < 1.0
         fps = self.cfg["fps_active"] if active else self.cfg["fps_idle"]
+        if time.time() - self.last_key_t < 0.35:
+            fps = max(fps, 100)              # apps echo a key 10-80 ms later: poll fast until it shows
         remaining = (1.0 / fps) - (time.time() - now)
         self.drain_events(remaining, wake_on_input=True)
 
@@ -531,12 +756,16 @@ class Daemon:
         self.inflight.clear()
         self.force_refresh()
         self.menu_open_until = 0.0
+        self.dimmed = False
+        self.last_badge_input = time.time()
         self.send(P.set_brightness(self.brightness) + P.set_timing(int(self.cfg.get("long_press_ms", 600)), 400, 90))
         self.say(f"DC32 Display host {__version__}", f"fw {self.badge.info.fw}")
 
     def run(self, once_seconds: float | None = None):
         log.info("dc32host %s starting, backend=%s, config=%s", __version__, self.be.name, CFG.config_path())
         t_end = time.time() + once_seconds if once_seconds else None
+        if once_seconds is None:
+            self.start_control()
         waiting_logged = False
         while t_end is None or time.time() < t_end:
             if not self.badge.connected:

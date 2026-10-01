@@ -198,6 +198,49 @@ def cmd_bootsel(a):
     print("badge rebooting into BOOTSEL (RP2350 USB bootloader)")
 
 
+def cmd_ctl(a):
+    """Send an action to the running daemon, e.g. `dc32host ctl toggle_runner` (for keyboard shortcuts)."""
+    import socket
+    from .daemon import control_socket_path
+    path = control_socket_path()
+    try:
+        s = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+        s.sendto(a.action.encode(), path)
+    except OSError as e:
+        print(f"dc32host is not running ({e})", file=sys.stderr)
+        return 1
+    return 0
+
+
+def _supervisor_running():
+    try:
+        import psutil
+    except ImportError:
+        return False
+    for p in psutil.process_iter(["cmdline"]):
+        if any(str(c).endswith("dc32-display/run.sh") for c in (p.info["cmdline"] or [])):
+            return True
+    return False
+
+
+def cmd_restart(a):
+    """Restart the display service (or start it if it isn't running at all)."""
+    if _supervisor_running():
+        a.action = "restart"
+        cmd_ctl(a)
+        print("restarting dc32host (back in a few seconds)")
+        return 0
+    import subprocess
+    data = os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
+    run_sh = os.path.join(data, "dc32-display", "run.sh")
+    if not os.path.exists(run_sh):
+        print(f"{run_sh} not found: run host/install_linux.sh", file=sys.stderr)
+        return 1
+    subprocess.Popen([run_sh], start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    print("started dc32host")
+    return 0
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="dc32host", description=f"DC32 Display host {__version__}")
     ap.add_argument("-v", "--verbose", action="store_true")
@@ -214,8 +257,15 @@ def main(argv=None):
     lt = sub.add_parser("latency-test")
     lt.add_argument("--samples", type=int, default=30)
     sub.add_parser("bootsel")
+    ct = sub.add_parser("ctl", help="send an action to the running daemon (toggle_runner, home_menu, ...)")
+    ct.add_argument("action")
+    sub.add_parser("restart", help="restart the display service, or start it if it is not running")
     a = ap.parse_args(argv)
     cmd = a.cmd or "run"
+    if cmd == "ctl":
+        return cmd_ctl(a)
+    if cmd == "restart":
+        return cmd_restart(a)
     setup_logging(a.verbose, to_file=(cmd == "run"))
     return {"run": cmd_run, "status": cmd_status, "list-windows": cmd_list_windows, "find-dashboard": cmd_find_dashboard,
             "bench": cmd_bench, "test-pattern": cmd_test_pattern, "latency-test": cmd_latency,

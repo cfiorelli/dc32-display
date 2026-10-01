@@ -1,5 +1,11 @@
 # Engineering log
 
+> **WHERE WE ARE (2026-10-01 ~15:15).** Badge on fw 0.1.0, Dell on Xorg, host autostarts; reboot test passed
+> (runner, host service and badge all came back unattended). New host features: badge home menu (FN),
+> badge-native runner view (A-hold / Ctrl+Alt+B), Badge Terminal, keystroke-only caret follow, typing zoom
+> without timeout, backlight idle-dim, `dc32host ctl/restart`, GNOME shortcuts. `tests/hw_dell.py` 17/17.
+> Open: intermittent badge USB re-enumeration (CDC debug log now captured to badge-cdc.log).
+
 ## 2026-10-01 — session 1 (cloud workspace; Dell not reachable)
 
 **Context.** Computer use on the Dell was unavailable this session: no remote-device tools, so no
@@ -61,7 +67,7 @@ here. Nothing has been flashed and no backup has been taken yet.
 3. Real USB numbers: `dc32host bench`, `dc32host latency-test`.
 4. Windows-only code paths (winapi.py, scheduled task) on real Windows.
 
-## 2026-10-01 — Dell is Ubuntu
+## 2026-10-01 — Dell is Ubuntu (correction from the owner)
 
 * Ubuntu is now the primary target. The Linux/X11 backend was already the one exercised end-to-end.
 * The main risk is the **Wayland** default session: XWayland can't capture or focus native apps.
@@ -76,3 +82,45 @@ here. Nothing has been flashed and no backup has been taken yet.
   windows; that would otherwise match any gnome-terminal window.
 * Daemon startup failures (e.g. display not ready at login) are logged and retried every 5 s.
 * E2E suite: 21/21 pass, including "dashboard not running → A-long starts it and shows it".
+
+## 2026-10-01 — on the Dell: badge backup
+
+* **BACKUP OK** (`badgetool.py backup`, two identical reads + `picotool verify`; `check-backup` passed).
+  * two copies (repo `backups/` + `~/dc32-badge-backups/`), path + SHA-256 recorded locally (not published);
+  * 4194304 bytes (4 MiB flash), program matches stock **1.31**.
+* BOOTSEL lessons: hold **only** the BOOTSEL button on the back, which on this badge is **bottom-left** when looking at the back (not top-right as documented; another back button holds the chip
+  in reset → dark screen, nothing on USB). Batteries out. Keep holding until the PC sees `2e8a:000f`.
+  The stock "Firmware update" menu item is an SD-card updater, not BOOTSEL.
+* An earlier attempt dropped off USB at 21% of the first read; its partial folder
+  `backups/<date>-original-full-flash/` (no manifest, never in `LATEST`) is unusable and can be deleted.
+
+## 2026-10-01 — on the Dell: flash + acceptance (Xorg session)
+
+* Flashed fw 0.1.0+e8aa168 (`badgetool.py flash`, `load -v` verified). Status screen + all 9 buttons OK.
+* Dashboard favorite: the owner's terminal runner-cost dashboard script (find-dashboard candidate [0]).
+* `install_linux.sh --xorg` run by the owner; session is now x11. Runner service stayed `active` throughout.
+* `dc32host bench`: raw full frames 2.9 fps / 452 kB/s (below the ~1 MB/s design estimate), decode 17.8 ms/frame,
+  small-update RTT 0.9 ms. `latency-test`: median 48 ms, p95 79 ms (n=30).
+* `latency-test` needed tkinter (not installed on Ubuntu); added an Xlib fallback in `host/dc32host/latency.py`.
+* New `tests/hw_dell.py`: the E2E checks on the real desktop + real badge (every frame must be ACKed by the
+  badge). 10/11 pass. FAIL: dashboard "focus if already running" (second A-hold didn't refocus the same window).
+* **Incident:** the first version closed its terminals with `xdotool windowclose`, which killed
+  gnome-terminal-server and closed all of the owner's terminal windows. Fixed: it now types `exit`.
+* **Open:** the badge dropped off USB twice (once recovered in 1 s during latency-test; once screen went
+  blank and needed a replug). Cause unknown: cable/port, power, or a firmware hang. Earlier, a BOOTSEL
+  read also dropped at 21%. Needs watching.
+* Not yet done physically: 10–12 (START menu on badge), 17, 18 (unplug/replug), 19 (reboot).
+
+## 2026-10-01 — monitor input switching, reboot test
+
+* With the HDMI monitor switched to another input, the kernel reports the connector as disconnected and
+  GNOME repaints about once a second, so the mirrored window lagged 0.4–1.3 s (keypress -> badge median
+  ~850 ms). `tools/dell_force_display.sh` pins the connector with the monitor's EDID
+  (`drm.edid_firmware=` + `video=HDMI-A-1:e`, EDID copied into the initramfs). After reboot: median 81 ms,
+  p95 218 ms with the monitor on another input.
+* Reboot test (ACCEPTANCE 19): runner service active, host autostarted at login, badge connected unattended.
+* Ubuntu's python3-rich 11.2 lacks `Table.add_section`, so the terminal dashboard crashed when launched
+  from the badge; the host venv now ships `rich>=13` and launches Python dashboards with it.
+* Dashboard matching by command line could pick an unrelated window owned by gnome-terminal-server
+  (one process owns every terminal window); shared window owners are now skipped.
+* X11 window rects now exclude GTK client-side-decoration shadows (`_GTK_FRAME_EXTENTS`).

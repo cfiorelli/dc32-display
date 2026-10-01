@@ -40,8 +40,9 @@ Dmitry Grinberg's original badge firmware (the firmware that shipped on the badg
 | 23 | SELECT |
 | 24 | CENTER (the "FN" key in this project) |
 
-BOOTSEL is **not** a GPIO: it is the ROM boot button on the back (top-right when the
-badge is face-down) — hold it while plugging in USB with the badge powered off.
+BOOTSEL is **not** a GPIO: it is the ROM boot button on the back (documented as top-right when the
+badge is face-down; on the badge tested here it was **bottom-left** with the back facing you, and another
+back button is reset) — hold it while plugging in USB with the badge powered off.
 
 ## Power
 

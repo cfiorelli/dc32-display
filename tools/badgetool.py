@@ -32,9 +32,10 @@ DIST = os.path.join(ROOT, "firmware", "dist")
 ALLOWED = {"info", "save", "verify", "load", "reboot", "version"}
 FLASH_BASE = 0x10000000
 
-PHYSICAL_BOOTSEL = ("Unplug the badge and switch it off. Flip it face-down, hold the top-right button on the back, "
-                    "and plug the USB-C cable in while holding it; release after 2 seconds. "
-                    "The badge screen stays dark and a drive named RP2350 appears on the PC.")
+PHYSICAL_BOOTSEL = ("Unplug the badge and take the batteries out. With the back facing you, hold ONLY the BOOTSEL "
+                    "button (bottom-left on the tested badge; documented as top-right) and plug the USB-C cable in. "
+                    "Keep holding until this tool reports the badge; the screen stays dark. "
+                    "(If you hold the reset button instead, nothing appears on USB.)")
 
 
 def picotool_path():
@@ -42,7 +43,7 @@ def picotool_path():
                  os.path.join(ROOT, "tools", "bin", "win", "picotool.exe") if os.name == "nt" else os.path.join(ROOT, "tools", "bin", "linux", "picotool")):
         if cand and os.path.exists(cand):
             return cand
-    sys.exit("picotool not found (bundled copy in tools/bin/ missing?)")
+    sys.exit("picotool not found: run  python3 tools/get_picotool.py  (downloads + verifies the official 2.3.0 build)")
 
 
 def pt(*args, check=True, capture=True, timeout=900):
@@ -238,6 +239,8 @@ def cmd_restore(a):
     ensure_bootsel()
     if a.stock:
         uf2 = os.path.join(STOCK, a.stock, "stock-firmware.uf2")
+        if not os.path.exists(uf2):
+            sys.exit(f"{uf2} missing: run  python3 tools/fetch_stock_firmware.py {a.stock}")
         sums = dict(reversed(l.split()) for l in open(os.path.join(STOCK, "SHA256SUMS")))
         if sha256(uf2) != sums[f"{a.stock}/stock-firmware.uf2"]:
             sys.exit("stock UF2 checksum mismatch")

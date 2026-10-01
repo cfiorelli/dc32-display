@@ -1,0 +1,6 @@
+# rcfile for the "Badge Terminal" (sized to the badge's 320x240 at 1:1). Normal shell, short prompt,
+# and a fixed window title so dc32host can find the window (Ubuntu's PS1 would overwrite it).
+[ -f ~/.bashrc ] && . ~/.bashrc
+PROMPT_COMMAND=
+PS1='\[\e]0;Badge Terminal\a\]\[\e[1;32m\]\W\[\e[0m\]\$ '
+cd ~

@@ -11,6 +11,8 @@ FAV = "GitHub Runner Dashboard"
 WORDS = {"cost": 30, "billing": 25, "dashboard": 25, "spend": 15, "usage": 8, "minutes": 5,
          "runner": 20, "actions": 6, "github": 10, "gha": 8}
 SCRIPT_EXT = (".py", ".js", ".mjs", ".ts", ".sh", ".ps1", ".go", ".rb", ".rs", ".bat", ".cmd")
+# Python dashboards run on the host's venv interpreter, which ships a current `rich` (Ubuntu 22.04's
+# python3-rich 11.2 lacks Table.add_section and crashes the runner cost dashboard).
 INTERP = {".py": [sys.executable if "python" in os.path.basename(sys.executable).lower() else "python"],
           ".js": ["node"], ".mjs": ["node"], ".ts": ["npx", "tsx"], ".sh": ["bash"],
           ".ps1": ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File"], ".rb": ["ruby"],

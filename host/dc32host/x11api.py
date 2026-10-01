@@ -31,7 +31,7 @@ class Backend:
                                     "_NET_WM_NAME", "UTF8_STRING", "_NET_WM_PID", "_NET_WM_WINDOW_TYPE",
                                     "_NET_WM_WINDOW_TYPE_NORMAL", "_NET_WM_WINDOW_TYPE_DIALOG",
                                     "_NET_WM_STATE", "_NET_WM_STATE_SKIP_TASKBAR", "_NET_WM_STATE_HIDDEN",
-                                    "_NET_FRAME_EXTENTS", "WM_CHANGE_STATE")}
+                                    "_NET_FRAME_EXTENTS", "_GTK_FRAME_EXTENTS", "WM_CHANGE_STATE")}
         self.own_pid = os.getpid()
 
     def _prop(self, win, name, typ=0):
@@ -99,7 +99,14 @@ class Backend:
             w = self._win(handle)
             g = w.get_geometry()
             t = w.translate_coords(self.root, 0, 0)
-            return (-t.x, -t.y, g.width, g.height)
+            x, y, wd, ht = -t.x, -t.y, g.width, g.height
+            # GTK client-side decorations put an invisible shadow inside the X window; drop it
+            ext = self._prop(w, "_GTK_FRAME_EXTENTS")
+            if ext is not None and len(ext) == 4:
+                l, r, tp, b = (int(v) for v in ext)
+                if wd > l + r and ht > tp + b:
+                    x, y, wd, ht = x + l, y + tp, wd - l - r, ht - tp - b
+            return (x, y, wd, ht)
         except Exception:
             return None
 
@@ -185,12 +192,13 @@ class Backend:
             # gnome-terminal ignores --title, so set the title from inside with an OSC escape
             # (works in every VTE/xterm-style terminal), then exec the real command.
             inner = ["bash", "-c", 'printf "\\033]0;%s\\007" "$1"; shift; exec "$@"', "dc32", title] + list(cmd)
+            geo = spec.get("geometry")      # "COLSxROWS"
             if shutil.which("gnome-terminal"):
-                args = ["gnome-terminal", "--"] + inner
+                args = ["gnome-terminal"] + ([f"--geometry={geo}"] if geo else []) + ["--"] + inner
             elif shutil.which("konsole"):
                 args = ["konsole", "-e"] + inner
             elif shutil.which("xterm"):
-                args = ["xterm", "-T", title, "-e"] + inner
+                args = ["xterm", "-T", title] + (["-geometry", geo] if geo else []) + ["-e"] + inner
             else:
                 args = ["x-terminal-emulator", "-e"] + inner
         else:

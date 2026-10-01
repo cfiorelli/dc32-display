@@ -132,11 +132,21 @@ class Viewport:
         self._prev_small = None
         self._prev_key = None
         self.activity = None
+        self.last_bbox = None         # (bbox, time) of the last small change (typing, prompt)
 
     def reset(self):
         self.center = None
         self.manual_until = 0.0
         self._prev_small = None
+
+    def set_zoom(self, zoom):
+        """Change zoom without forgetting where the activity was: a new 1:1 view opens on the caret."""
+        self.zoom = zoom
+        self.center = None
+        self.manual_until = 0.0
+        if zoom != "fit" and self.last_bbox and time.time() - self.last_bbox[1] < 30:
+            bx0, by0, bx1, by1 = self.last_bbox[0]
+            self.center = ((bx0 + bx1) / 2, by1 - 8)
 
     def pan(self, dx, dy):
         if self.zoom == "fit" or self.center is None:
@@ -146,25 +156,46 @@ class Viewport:
         self.center = (self.center[0] + dx * step_x, self.center[1] + dy * step_y)
         self.manual_until = time.time() + 15
 
-    def _activity(self, src: np.ndarray, key):
-        """Bounding box of what changed since the previous grab (cheap: 1/4 resolution, luma)."""
+    def _activity(self, src: np.ndarray, key, typing=False):
+        """Where the caret probably is, from what changed since the previous grab (1/4 resolution).
+
+        Only changes that follow a keystroke count: spinners, clocks and page loads change the screen
+        on their own and used to drag the view around. Changes are split into row bands (separate
+        lines); a typed character is a small band, and the band nearest the previous caret wins, so a
+        status line elsewhere can't steal the view."""
         small = src[::4, ::4].sum(axis=2, dtype=np.uint16)
-        bbox = None
-        if self._prev_small is not None and self._prev_key == key and self._prev_small.shape == small.shape:
+        best = None
+        if (typing and self._prev_small is not None and self._prev_key == key
+                and self._prev_small.shape == small.shape):
             diff = np.abs(small.astype(np.int32) - self._prev_small) > 24
-            if diff.any():
-                ys = np.flatnonzero(diff.any(axis=1))
-                xs = np.flatnonzero(diff.any(axis=0))
-                bbox = (xs[0] * 4, ys[0] * 4, (xs[-1] + 1) * 4, (ys[-1] + 1) * 4)
+            rows = np.flatnonzero(diff.any(axis=1))
+            bands, start = [], None
+            for i, r in enumerate(rows):
+                if start is None:
+                    start = r
+                if i + 1 == len(rows) or rows[i + 1] - r > 2:
+                    xs = np.flatnonzero(diff[start:r + 1].any(axis=0))
+                    bands.append((xs[0] * 4, start * 4, (xs[-1] + 1) * 4, (r + 1) * 4))
+                    start = None
+            # keystroke echo: at most ~3 text lines tall and not a whole-width repaint
+            bands = [b for b in bands if b[3] - b[1] <= 64 and b[2] - b[0] <= max(160, 0.5 * src.shape[1])]
+            if bands:
+                prev = self.last_bbox[0] if self.last_bbox and time.time() - self.last_bbox[1] < 30 else None
+                if prev is not None:
+                    px, py = (prev[0] + prev[2]) / 2, (prev[1] + prev[3]) / 2
+                    best = min(bands, key=lambda b: abs((b[0] + b[2]) / 2 - px) + 3 * abs((b[1] + b[3]) / 2 - py))
+                else:
+                    best = min(bands, key=lambda b: (b[2] - b[0]) * (b[3] - b[1]))
+                self.last_bbox = (best, time.time())
         self._prev_small = small.astype(np.int32)
         self._prev_key = key
-        return bbox
+        return best
 
-    def compose(self, src: np.ndarray, key, focus_pt=None, letterbox=(0, 0, 0)):
+    def compose(self, src: np.ndarray, key, focus_pt=None, letterbox=(0, 0, 0), typing=False):
         """src: RGB array of the source. focus_pt: preferred point (caret/mouse) in src coords.
         Returns (out_rgb, transform) where transform maps src (x, y) -> out (x, y)."""
         sh, sw = src.shape[:2]
-        bbox = self._activity(src, key)
+        bbox = self._activity(src, key, typing)
         z = ZOOMS[self.zoom]
         if z is None:
             s = min(OUT_W / sw, OUT_H / sh, 1.0)
@@ -186,8 +217,7 @@ class Viewport:
                 target = focus_pt
             elif bbox is not None:
                 bx0, by0, bx1, by1 = bbox
-                if (bx1 - bx0) * (by1 - by0) < 0.25 * sw * sh:   # ignore full-window churn (scrolls)
-                    target = ((bx0 + bx1) / 2, by1 - 8)
+                target = (bx1, by1 - 8)        # right end of the change: where the caret went
         if self.center is None:
             self.center = target or (sw / 2, sh - vh / 2)
         elif target is not None:
@@ -195,6 +225,8 @@ class Viewport:
             # hysteresis: only move when the target leaves the inner 60% of the viewport
             if abs(target[0] - cx) > 0.3 * vw or abs(target[1] - cy) > 0.3 * vh:
                 self.center = target
+        if sw - vw <= 48:             # barely wider than the badge (e.g. a scrollbar): keep the left edge
+            self.center = (vw / 2, self.center[1])
         cx = min(max(self.center[0], vw / 2), sw - vw / 2)
         cy = min(max(self.center[1], vh / 2), sh - vh / 2)
         self.center = (cx, cy)

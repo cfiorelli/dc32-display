@@ -10,7 +10,6 @@ from . import config as CFG
 
 
 def run_latency_test(samples: int = 30):
-    import tkinter as tk
     from .daemon import Daemon
 
     cfg = CFG.load()
@@ -35,6 +34,13 @@ def run_latency_test(samples: int = 30):
     th = threading.Thread(target=d.run, daemon=True)
     th.start()
 
+    try:
+        import tkinter as tk
+    except ImportError:          # Ubuntu without python3-tk: drive a plain X11 window instead
+        _xlib_window(state, colors, samples)
+        _report(state["results"])
+        return
+
     root = tk.Tk()
     root.title("dc32 latency test")
     root.geometry("800x600+100+100")
@@ -58,7 +64,40 @@ def run_latency_test(samples: int = 30):
 
     root.after(3000, step)    # let the badge connect first
     root.mainloop()
-    r = sorted(state["results"])
+    _report(state["results"])
+
+
+def _xlib_window(state, colors, samples):
+    from Xlib import X, display as xdisplay
+    dpy = xdisplay.Display()
+    scr = dpy.screen()
+    pix = [scr.default_colormap.alloc_color(r * 257, g * 257, b * 257).pixel for r, g, b in colors]
+    win = scr.root.create_window(100, 100, 800, 600, 0, scr.root_depth, X.InputOutput, X.CopyFromParent,
+                                 background_pixel=scr.black_pixel, event_mask=X.ExposureMask)
+    win.set_wm_name("dc32 latency test")
+    win.map()
+    dpy.flush()
+    time.sleep(0.5)
+    win.set_input_focus(X.RevertToParent, X.CurrentTime)
+    win.configure(stack_mode=X.Above)
+    dpy.flush()
+    time.sleep(3)                # let the badge connect first
+    n = 0
+    deadline = time.time() + samples * 3 + 30
+    while len(state["results"]) < samples and time.time() < deadline:
+        if state["t0"] is None or time.time() - state["t0"] > 2:
+            win.change_attributes(background_pixel=pix[n % 2])
+            win.clear_area()
+            dpy.sync()
+            state["color"], state["frame"], state["t0"] = colors[n % 2], None, time.time()
+            n += 1
+        time.sleep((400 + (n * 37) % 150) / 1000)   # jitter so we don't phase-lock with polling
+    win.destroy()
+    dpy.flush()
+
+
+def _report(results):
+    r = sorted(results)
     if not r:
         print("no samples (badge connected? window focused?)")
         return
