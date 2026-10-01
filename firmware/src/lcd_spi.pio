@@ -1,0 +1,12 @@
+; 1-bit SPI transmitter for the DC32 badge LCD (mode 0, MSB first).
+; Equivalent to the stock firmware's 2-instruction PIO program (dispDefcon.c):
+;   OUT pins,1 side 0 ; MOV x,x side 1
+; OUT base = MOSI (GPIO6), side-set base = SCK (GPIO8). Autopull; threshold 8 for
+; command bytes, 16 for pixel scanout. One bit per 2 PIO cycles.
+
+.program lcd_spi
+.side_set 1
+.wrap_target
+    out pins, 1   side 0
+    nop           side 1
+.wrap

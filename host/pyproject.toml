@@ -1,0 +1,24 @@
+[project]
+name = "dc32host"
+version = "0.1.0"
+description = "Host daemon for the DC32 Display badge firmware"
+requires-python = ">=3.9"
+dependencies = [
+  "numpy>=1.24", "pillow>=10.1", "mss>=9.0", "pyusb>=1.2.1",
+  "libusb-package>=1.0.26; sys_platform == 'win32'",
+  "psutil>=5.9", "python-xlib>=0.33; sys_platform == 'linux'",
+  "rich>=13",   # for terminal dashboards launched from the badge (A-hold / menu)
+]
+
+[project.scripts]
+dc32host = "dc32host.__main__:main"
+
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["dc32host"]
+
+[tool.setuptools.package-data]
+dc32host = ["badge_bashrc"]

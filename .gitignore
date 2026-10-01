@@ -1,0 +1,21 @@
+firmware/build/
+__pycache__/
+*.pyc
+*.egg-info/
+.deps/
+# badge dumps and everything machine-specific under backups/ stay local
+backups/*
+!backups/README.md
+!backups/stock/
+backups/stock/*
+!backups/stock/SHA256SUMS
+!backups/stock/SOURCE.md
+# official picotool binaries are downloaded by tools/get_picotool.py, not committed
+tools/bin/linux/
+tools/bin/win/
+# only the release image of our own firmware is committed
+firmware/dist/*
+!firmware/dist/dc32_display.uf2
+!firmware/dist/dc32_display.sha256
+!firmware/dist/BUILDINFO.txt
+docs/LOCAL_NOTES.md

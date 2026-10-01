@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# GNOME keyboard shortcuts for the badge (user-level, no sudo). Re-running is safe; --remove undoes them.
+#   Ctrl+Alt+B        runner costs view <-> screen mirroring
+#   Ctrl+Alt+Z        zoom: fit -> 2:1 -> 1:1        (B on the badge / Ctrl+Alt+X: back to fit)
+#   Ctrl+Alt+I/J/K/L  move the badge view up/left/down/right (when zoomed)
+set -euo pipefail
+SCHEMA=org.gnome.settings-daemon.plugins.media-keys
+BASE=/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings
+BIN="$HOME/.local/bin/dc32host"
+KEYS=(
+  "dc32-runner|DC32 badge: runner view / mirror|<Primary><Alt>b|toggle_runner"
+  "dc32-zoom|DC32 badge: zoom|<Primary><Alt>z|zoom_cycle"
+  "dc32-fit|DC32 badge: fit whole window|<Primary><Alt>x|zoom_fit"
+  "dc32-up|DC32 badge: view up|<Primary><Alt>i|pan_up"
+  "dc32-left|DC32 badge: view left|<Primary><Alt>j|pan_left"
+  "dc32-down|DC32 badge: view down|<Primary><Alt>k|pan_down"
+  "dc32-right|DC32 badge: view right|<Primary><Alt>l|pan_right"
+)
+paths=()
+for k in "${KEYS[@]}"; do paths+=("$BASE/${k%%|*}/"); done
+cur=$(gsettings get $SCHEMA custom-keybindings)
+new=$(python3 - "$cur" "${1:-}" "${paths[@]}" <<'PY'
+import ast, sys
+cur = ast.literal_eval(sys.argv[1].replace("@as ", ""))
+mode, ours = sys.argv[2], sys.argv[3:]
+keep = [p for p in cur if p not in ours]
+print(keep if mode == "--remove" else keep + ours)
+PY
+)
+gsettings set $SCHEMA custom-keybindings "$new"
+if [ "${1:-}" = "--remove" ]; then echo "removed DC32 badge shortcuts"; exit 0; fi
+for k in "${KEYS[@]}"; do
+  IFS='|' read -r id name binding action <<<"$k"
+  S="$SCHEMA.custom-keybinding:$BASE/$id/"
+  gsettings set "$S" name "$name"
+  gsettings set "$S" command "$BIN ctl $action"
+  gsettings set "$S" binding "$binding"
+  echo "$binding -> dc32host ctl $action"
+done

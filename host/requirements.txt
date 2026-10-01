@@ -1,0 +1,8 @@
+numpy>=1.24
+pillow>=10.1
+mss>=9.0
+pyusb>=1.2.1
+libusb-package>=1.0.26; sys_platform == "win32"
+psutil>=5.9
+python-xlib>=0.33; sys_platform == "linux"
+rich>=13
