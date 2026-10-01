@@ -13,7 +13,7 @@ the Dell + badge (run book below).
 | 5 | Foreground app appears on badge | SIM | focus any app |
 | 6 | Badge follows app switches | SIM | Alt+Tab around |
 | 7 | Typing appears live | SIM (keypress→badge fb median 27 ms at 1:1, 46 ms fit) | type in a terminal with the wireless keyboard |
-| 8 | Terminal scrolling updates | SIM (≈29 updates/s) | `ping -t localhost` / `yes` |
+| 8 | Terminal scrolling updates | SIM (≈29 updates/s) | `ping localhost` / `yes` |
 | 9 | Mouse cursor | SIM | move mouse over shown window |
 | 10 | START opens app list | SIM (host side) | press START |
 | 11 | Navigate list with badge | PENDING (firmware-local) | Up/Down |
@@ -30,12 +30,14 @@ the Dell + badge (run book below).
 ## Run book (once the Dell is reachable)
 
 1. Copy `dc32-display` to the Dell (`~/dc32-display`). Log in with **Ubuntu on Xorg**.
-2. `python tools/badgetool.py backup` → follow the single physical instruction (BOOTSEL).
+2. `host/install_linux.sh` (add `--xorg` to make Xorg the default). This installs the udev rules
+   picotool needs to reach the badge without root.
+3. `python3 tools/badgetool.py backup` → follow the single physical instruction (BOOTSEL).
    Confirm `BACKUP OK`, two paths and the SHA-256. Record them in `docs/ENGINEERING_LOG.md`.
-3. `python tools/badgetool.py check-backup`
-4. `python tools/badgetool.py flash` (refuses without step 2). The badge shows the status screen
+   Then run `python3 tools/badgetool.py check-backup`.
+4. `python3 tools/badgetool.py flash` (refuses without step 3). The badge shows the status screen
    with a live button tester. Press all 9 buttons (test 3 + every button).
-5. Install the host: `host/install_linux.sh` (add `--xorg` to make Xorg the default login session).
+5. The already-running host service picks the badge up within about a second.
 6. `dc32host find-dashboard` → review the candidates → `dc32host find-dashboard --write --pick N`.
 7. Stop the service, then run `dc32host bench` and `dc32host latency-test` (test 20). Start the
    service again.

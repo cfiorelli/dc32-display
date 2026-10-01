@@ -51,9 +51,9 @@ GNOME blocks screen capture and window switching for tools like this. The badge 
 message saying so instead of a black screen.
 
 ```
-python3 tools/badgetool.py backup         # mandatory first: full-flash backup, verified, 2 copies
+host/install_linux.sh                     # first: deps + udev rules (picotool needs them), autostart (add --xorg if needed)
+python3 tools/badgetool.py backup         # mandatory before flashing: full-flash backup, verified, 2 copies
 python3 tools/badgetool.py flash          # refuses without a verified backup
-host/install_linux.sh                     # deps, udev rules, autostart at login (add --xorg if needed)
 dc32host find-dashboard --write           # locate the runner cost dashboard
 ```
 
