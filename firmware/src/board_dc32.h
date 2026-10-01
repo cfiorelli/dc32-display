@@ -1,6 +1,8 @@
 // DEF CON 32 badge pin map — verified against DC32-cfw src/pinoutRp2350defcon.h (see docs/HARDWARE.md)
 #pragma once
 
+#define PIN_PSRAM_CS    0       // QSPI PSRAM chip select (stock: XIP_SS_N_1, idle high)
+
 #define PIN_LCD_DC      5
 #define PIN_LCD_MOSI    6
 #define PIN_LCD_SCK     8

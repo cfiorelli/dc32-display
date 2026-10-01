@@ -13,7 +13,7 @@ typedef struct {
 
 void buttons_init(void);
 void buttons_set_timing(uint16_t long_ms, uint16_t repeat_delay_ms, uint16_t repeat_ms);
-// Call often (>= every 2 ms). Returns true and fills *ev while events are queued.
+// Call often (>= every 2 ms); then drain events with buttons_next().
 void buttons_poll(uint32_t now_ms);
 bool buttons_next(btn_event_t *ev);
 uint16_t buttons_down(void);           // debounced bitmask

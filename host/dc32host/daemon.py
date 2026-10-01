@@ -7,7 +7,6 @@ import re
 import sys
 import time
 
-import numpy as np
 
 from . import __version__
 from . import capture as C

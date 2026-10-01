@@ -257,6 +257,10 @@ int main(void)
     gpio_init(PIN_SELF_PWR);
     gpio_set_dir(PIN_SELF_PWR, GPIO_OUT);
     gpio_put(PIN_SELF_PWR, 1);
+    // PSRAM chip-select (GPIO0) shares the QSPI bus with flash: hold it deasserted (stock does the same).
+    gpio_init(PIN_PSRAM_CS);
+    gpio_set_dir(PIN_PSRAM_CS, GPIO_OUT);
+    gpio_put(PIN_PSRAM_CS, 1);
 
     // 2) stock firmware runs at 125 MHz; the LCD PIO timing is derived from it.
     set_sys_clock_khz(125000, true);
