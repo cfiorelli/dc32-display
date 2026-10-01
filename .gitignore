@@ -4,3 +4,5 @@ __pycache__/
 backups/*/
 !backups/README.md
 dist/
+backups/stock/*/*.bin
+backups/stock/*/*.uf2

@@ -1,0 +1,2 @@
+Official picotool 2.3.0 builds from https://github.com/raspberrypi/pico-sdk-tools/releases/tag/v2.3.0-0
+zip sha256 4dcad3bfbc9d126bdb3870bbce0668f5d300d0f2f505ce775b3444bfdd5eaa79 (win), tar.gz d8222dbb04e83427bcaef8466fe6e76b0e0193c3a140029934bd365dae49f61f (linux)
