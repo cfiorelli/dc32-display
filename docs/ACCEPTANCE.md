@@ -19,7 +19,7 @@ the Dell + badge (run book below).
 | 11 | Navigate list with badge | PENDING (firmware-local) | Up/Down |
 | 12 | Selecting focuses app | SIM | A |
 | 13 | Quick previous/next switching | SIM | SELECT short ×2 |
-| 14 | Dashboard shortcut | SIM (with stand-in dashboard) | hold A; run `dc32host find-dashboard --write` first |
+| 14 | Dashboard shortcut (focus if running, start if not) | SIM (stand-in dashboard, both cases) | hold A; run `dc32host find-dashboard --write` first |
 | 15 | Pinned mode | SIM | hold SELECT once |
 | 16 | Whole-desktop mode | SIM | hold SELECT twice |
 | 17 | Wireless keyboard/mouse unaffected | by design (no HID interface; D-pad never injects keys) | use them normally |
@@ -29,14 +29,13 @@ the Dell + badge (run book below).
 
 ## Run book (once the Dell is reachable)
 
-1. `git clone`/copy `dc32-display` to the Dell, e.g. `C:\dc32-display` or `~/dc32-display`.
+1. Copy `dc32-display` to the Dell (`~/dc32-display`). Log in with **Ubuntu on Xorg**.
 2. `python tools/badgetool.py backup` → follow the single physical instruction (BOOTSEL).
    Confirm `BACKUP OK`, two paths and the SHA-256. Record them in `docs/ENGINEERING_LOG.md`.
 3. `python tools/badgetool.py check-backup`
 4. `python tools/badgetool.py flash` (refuses without step 2). The badge shows the status screen
    with a live button tester. Press all 9 buttons (test 3 + every button).
-5. Install the host: Windows `powershell -ExecutionPolicy Bypass -File host\install_windows.ps1`,
-   Linux `host/install_linux.sh`.
+5. Install the host: `host/install_linux.sh` (add `--xorg` to make Xorg the default login session).
 6. `dc32host find-dashboard` → review the candidates → `dc32host find-dashboard --write --pick N`.
 7. Stop the service, then run `dc32host bench` and `dc32host latency-test` (test 20). Start the
    service again.

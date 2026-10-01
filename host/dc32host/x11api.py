@@ -15,10 +15,15 @@ class Backend:
     name = "x11"
 
     def __init__(self, cfg):
-        from Xlib import X, display  # noqa: F401
+        from Xlib import display
         self.cfg = cfg
-        if os.environ.get("XDG_SESSION_TYPE") == "wayland" and not os.environ.get("DISPLAY"):
-            raise RuntimeError("Wayland session without XWayland DISPLAY: screen capture unsupported")
+        # Under Wayland, XWayland only exposes X11 clients: no capture of native apps, no focus control.
+        self.wayland = os.environ.get("XDG_SESSION_TYPE") == "wayland" or bool(os.environ.get("WAYLAND_DISPLAY"))
+        if self.wayland:
+            log.error("Wayland session detected: log in with 'Ubuntu on Xorg' (gear icon on the login screen) "
+                      "or run host/install_linux.sh --xorg")
+        if not os.environ.get("DISPLAY"):
+            raise RuntimeError("no X11 DISPLAY")
         self.d = display.Display()
         self.root = self.d.screen().root
         a = self.d.intern_atom
@@ -177,14 +182,17 @@ class Backend:
         title = spec.get("title") or "dc32"
         cwd = spec.get("cwd") or None
         if spec.get("terminal", True):
+            # gnome-terminal ignores --title, so set the title from inside with an OSC escape
+            # (works in every VTE/xterm-style terminal), then exec the real command.
+            inner = ["bash", "-c", 'printf "\\033]0;%s\\007" "$1"; shift; exec "$@"', "dc32", title] + list(cmd)
             if shutil.which("gnome-terminal"):
-                args = ["gnome-terminal", f"--title={title}", "--"] + list(cmd)
+                args = ["gnome-terminal", "--"] + inner
             elif shutil.which("konsole"):
-                args = ["konsole", "-p", f"tabtitle={title}", "-e"] + list(cmd)
+                args = ["konsole", "-e"] + inner
             elif shutil.which("xterm"):
-                args = ["xterm", "-T", title, "-e"] + list(cmd)
+                args = ["xterm", "-T", title, "-e"] + inner
             else:
-                args = ["x-terminal-emulator", "-T", title, "-e"] + list(cmd)
+                args = ["x-terminal-emulator", "-e"] + inner
         else:
             args = list(cmd)
         log.info("launching: %s", args)

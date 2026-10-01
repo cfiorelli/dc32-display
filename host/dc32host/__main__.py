@@ -61,7 +61,15 @@ def cmd_run(a):
         logging.getLogger("dc32").error("another dc32host instance is already running")
         return 1
     from .daemon import Daemon
-    Daemon(CFG.load()).run()
+    log = logging.getLogger("dc32")
+    while True:     # at login the X display / session may not be ready yet: retry instead of dying
+        try:
+            d = Daemon(CFG.load())
+            break
+        except Exception as e:
+            log.error("startup failed (%s); retrying in 5 s", e)
+            time.sleep(5)
+    d.run()
     return 0
 
 

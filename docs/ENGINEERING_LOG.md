@@ -60,3 +60,19 @@ here. Nothing has been flashed and no backup has been taken yet.
 2. Backup → flash → acceptance tests (`docs/ACCEPTANCE.md` run book).
 3. Real USB numbers: `dc32host bench`, `dc32host latency-test`.
 4. Windows-only code paths (winapi.py, scheduled task) on real Windows.
+
+## 2026-10-01 — Dell is Ubuntu
+
+* Ubuntu is now the primary target. The Linux/X11 backend was already the one exercised end-to-end.
+* The main risk is the **Wayland** default session: XWayland can't capture or focus native apps.
+  The host detects it, logs it, and shows instructions on the badge. `install_linux.sh --xorg`
+  makes GDM default to Xorg (backup of `/etc/gdm3/custom.conf` kept). Decision: run on Xorg rather
+  than build a portal/PipeWire + GNOME-extension backend.
+* Installer now does `apt` deps (python3-venv, libusb, libxss1, xdotool), udev rules for the badge
+  and the RP2350 bootloader, and a ModemManager ignore for the CDC debug port. It links
+  `~/.local/bin/dc32host`. Tested in a scratch home.
+* gnome-terminal ignores `--title`, so launched dashboards set their title with an OSC escape
+  before `exec`. Matching by command line now skips terminal-server pids that own several
+  windows; that would otherwise match any gnome-terminal window.
+* Daemon startup failures (e.g. display not ready at login) are logged and retried every 5 s.
+* E2E suite: 21/21 pass, including "dashboard not running → A-long starts it and shows it".

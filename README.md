@@ -43,18 +43,23 @@ backups/    raw badge backups (created on the Dell) + stock DEF CON firmware wit
 RESTORE.md  how to put the badge back exactly as it was
 ```
 
-## Quick start (on the PC the badge plugs into)
+## Quick start (Ubuntu on the Dell)
+
+The session must be **X11**: on the login screen click the gear icon and choose
+**"Ubuntu on Xorg"** (or run the installer with `--xorg` to make that the default). Under Wayland,
+GNOME blocks screen capture and window switching for tools like this. The badge then shows a
+message saying so instead of a black screen.
 
 ```
-python tools/badgetool.py backup          # mandatory first: full-flash backup, verified, 2 copies
-python tools/badgetool.py flash           # refuses without a verified backup
-host\install_windows.ps1                  # or: host/install_linux.sh  (autostart at login)
+python3 tools/badgetool.py backup         # mandatory first: full-flash backup, verified, 2 copies
+python3 tools/badgetool.py flash          # refuses without a verified backup
+host/install_linux.sh                     # deps, udev rules, autostart at login (add --xorg if needed)
 dc32host find-dashboard --write           # locate the runner cost dashboard
 ```
 
-On Windows the CLI lives at `%LOCALAPPDATA%\dc32-display\venv\Scripts\dc32host.exe`. Config:
-`%APPDATA%\dc32-display\config.json` (Linux: `~/.config/dc32-display/`). Logs:
-`%LOCALAPPDATA%\dc32-display\logs\host.log` (Linux: `~/.local/state/dc32-display/logs/`).
+Config: `~/.config/dc32-display/config.json`. Logs: `~/.local/state/dc32-display/logs/host.log`.
+Autostart: `~/.config/autostart/dc32-display.desktop` (supervised restart loop). A Windows
+installer (`host/install_windows.ps1`) also exists, but Ubuntu is the target and the tested path.
 
 ## Design notes
 

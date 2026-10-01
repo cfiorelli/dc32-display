@@ -124,8 +124,13 @@ class Daemon:
                 return wi
         if m.get("cmdline"):
             pids = self._ancestor_pids(re.compile(m["cmdline"]))
+            # A terminal server (gnome-terminal-server, konsole) owns every terminal window, so an
+            # ancestor pid only identifies the dashboard when it owns exactly one window.
+            per_pid = {}
             for wi in windows:
-                if wi.pid in pids:
+                per_pid[wi.pid] = per_pid.get(wi.pid, 0) + 1
+            for wi in windows:
+                if wi.pid in pids and per_pid[wi.pid] == 1:
                     return wi
         return None
 
@@ -382,6 +387,9 @@ class Daemon:
         return self.shown           # e.g. desktop / start menu focused: keep the last app
 
     def build_frame(self):
+        if getattr(self.be, "wayland", False):
+            return time.time(), C.placeholder(["Wayland session: capture blocked", "Log out, click the gear icon,",
+                                               "choose 'Ubuntu on Xorg', log in", "(or: install_linux.sh --xorg)"]), False
         src_wi = self.pick_source()
         changed_src = (src_wi.handle if src_wi else None) != (self.shown.handle if self.shown else None)
         if changed_src:

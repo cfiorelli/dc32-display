@@ -78,7 +78,7 @@ def main():
     font = ["-fa", "Monospace", "-fs", "14"]
     spawn("xterm", "-T", "alpha", *font, "-geometry", "80x24+0+0", "-e", "bash", "--norc")
     spawn("xterm", "-T", "gamma", *font, "-geometry", "80x24+300+200", "-bg", "navy", "-e", "bash", "--norc")
-    spawn("xterm", "-T", "GitHub Runner Dashboard", *font, "-geometry", "60x20+600+100", "-e", dash)
+    dash_term = spawn("xterm", "-T", "GitHub Runner Dashboard", *font, "-geometry", "60x20+600+100", "-e", dash)
     wa, wg, wd = wid("alpha"), wid("gamma"), wid("GitHub Runner Dashboard")
 
     from dc32host import config as CFG
@@ -87,6 +87,7 @@ def main():
 
     cfg = CFG.load()
     cfg["favorites"][0]["match"]["title"] = "^GitHub Runner Dashboard$"
+    cfg["favorites"][0]["launch"] = {"cmd": [dash], "cwd": tmp, "title": "GitHub Runner Dashboard", "terminal": True}
     d = Daemon(cfg)
     fb = FakeBadge()
     d.badge = fb
@@ -210,6 +211,20 @@ def main():
     fb.press("b", "short")
     time.sleep(0.2)
     check("B returns to fit", d.vp.zoom == "fit")
+
+    # 14b: dashboard not running -> A-long starts it (titled via OSC escape) and shows it
+    dash_term.terminate()                     # close the running dashboard
+    wait_for(lambda: not sh("xdotool", "search", "--name", "^GitHub Runner Dashboard$"), 3)
+    gone = not sh("xdotool", "search", "--name", "^GitHub Runner Dashboard$")
+    activate(wa)
+    wait_for(lambda: d.shown is not None and d.shown.title == "alpha", 2)
+    fb.press("a", "long")
+    ok = wait_for(lambda: d.shown is not None and d.shown.title == "GitHub Runner Dashboard"
+                  and sh("xdotool", "getactivewindow") == str(d.shown.handle), 10)
+    ok = ok if gone else None
+    check("A-long starts dashboard when not running, then shows it", ok is not None,
+          f"{ok:.1f} s" if ok else f"gone={gone} shown={d.shown and d.shown.title} h={d.shown and d.shown.handle} wd={wd} "
+          f"active={sh('xdotool', 'getactivewindow')} search={sh('xdotool', 'search', '--name', '^GitHub Runner Dashboard$')}")
 
     # 18: disconnect / reconnect
     real_write = fb.write
