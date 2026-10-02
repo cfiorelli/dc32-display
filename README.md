@@ -2,7 +2,7 @@
 
 ![DEF CON 32 badge on a wooden stand, mirroring a terminal over USB](docs/img/badge.jpg)
 
-Turns a **DEF CON 32 Human Badge** (RP2350, 320×240 LCD) into a live USB mini-display and
+Turns a **DEF CON 32 Badge** (RP2350, 320×240 LCD) into a live USB mini-display and
 controller for a Linux PC. It mirrors the app you're using (and follows your typing at 1:1, so text
 is readable), has a badge-native home menu and app switcher, and can show a badge-native GitHub
 Actions runner cost view.
