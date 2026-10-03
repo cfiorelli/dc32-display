@@ -49,6 +49,14 @@ class Schedule(unittest.TestCase):
         noon = now.replace(hour=12)
         self.assertTrue(view.status(v, loc, None, noon - dt.timedelta(hours=6), noon)[1].startswith('STALE'))
 
+    def test_permission_error_says_no_access(self):
+        view = rv.RunnerView(self.d)
+        now = dt.datetime.fromtimestamp(at(12)).astimezone()
+        v = {'backfill': (5, 5), 'days7': [], 'month_min': {}, 'month_label': now.strftime('%B %Y')}
+        loc = {'units': [{'unit': 'a.b.c.d', 'active': 'active'}]}
+        self.assertEqual(view.status(v, loc, 'no access - token needs repo Actions: read', now, now),
+                         (rv.BAD, 'NO ACCESS'))
+
 
 class MouseCamera(unittest.TestCase):
     def setUp(self):
