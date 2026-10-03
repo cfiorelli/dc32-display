@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import datetime as dt
 import importlib.util
+import json
 import logging
 import os
 import shutil
@@ -21,6 +22,7 @@ from PIL import Image, ImageDraw, ImageFont
 from . import capture as C
 
 log = logging.getLogger("dc32.runner")
+STATE_FILE = Path.home() / ".cache" / "dc32-display" / "runner-state.json"   # last good snapshot (see _restore)
 
 W, H = C.OUT_W, C.OUT_H
 # dark chart surface + categorical slots 1/2 (validated pair), text inks, reserved status colours
@@ -110,7 +112,51 @@ class RunnerData:
         local_now = now.astimezone()
         self.st = m.State(local_now.year, local_now.month, m.SELF_HOSTED_SINCE, cache)
 
+    def _restore(self):
+        """Last good snapshot from STATE_FILE: the view shows it at once, and a restart within the
+        refresh interval waits for the schedule instead of refetching everything."""
+        m, st = self.mod, self.st
+        try:
+            s = json.loads(STATE_FILE.read_text())
+        except (OSError, ValueError):
+            return
+        if s.get("version") != 1 or (s.get("year"), s.get("month")) != (st.year, st.month):
+            return
+        st.billing_items, st.budget, st.runners = s.get("billing_items"), s.get("budget"), s.get("runners")
+        st.billing_at = _iso(s.get("billing_at"))
+        st.listed_at.update({tuple(k.split("|", 1)): _iso(t) for k, t in (s.get("listed_at") or {}).items()})
+        updated = _iso(s.get("updated"))
+        v = m.compute(st, dt.datetime.now(m.UTC))
+        done, total = v.get("backfill", (0, 0))
+        with self.lock:
+            self.v, self.updated = v, updated
+        if updated and done >= total:
+            self._synced = True
+            self.next_at = max(self.next_at, updated.timestamp() + self.refresh_s)
+        log.info("runner data restored (last update %s, next fetch in %d min)", updated,
+                 max(0, self.next_at - time.time()) // 60)
+
+    def _save(self):
+        st = self.st
+        with st.lock, self.lock:
+            s = {"version": 1, "year": st.year, "month": st.month, "updated": self.updated,
+                 "billing_items": st.billing_items, "billing_at": st.billing_at, "budget": st.budget,
+                 "runners": st.runners, "listed_at": {"|".join(k): t for k, t in st.listed_at.items()}}
+        try:
+            STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+            tmp = STATE_FILE.with_suffix(".tmp")
+            tmp.write_text(json.dumps(s, default=lambda o: o.isoformat() if hasattr(o, "isoformat") else str(o)))
+            tmp.replace(STATE_FILE)
+        except OSError as e:
+            log.debug("runner state not saved: %s", e)
+
     def _gh_loop(self):
+        if self.st is None:
+            try:
+                self._setup()
+                self._restore()
+            except Exception as e:          # the fetch below retries setup and reports the error
+                log.debug("runner restore skipped: %s", e)
         while True:
             if time.time() >= self.next_at and not self._forced and self._synced and self.quiet_now():
                 self.next_at = self.quiet_end()          # nobody's looking: skip the night's refreshes
@@ -138,6 +184,7 @@ class RunnerData:
                     self.next_at = time.time() + (20 if done < total else min(900, self.refresh_s) if err
                                                   else self.refresh_s)
                     self._synced = done >= total
+                    self._save()
                     log.info("runner data: hosted MTD $%.2f, backfill %s/%s, api calls %s%s",
                              v.get("actions_net", 0), done, total, self.api.calls,
                              f", error: {err}" if err else "")
@@ -181,6 +228,10 @@ class RunnerData:
     def snapshot(self):
         with self.lock:
             return self.v, dict(self.local), self.error, self.updated
+
+
+def _iso(s):
+    return dt.datetime.fromisoformat(s) if s else None
 
 
 def _money(x):
