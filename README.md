@@ -17,7 +17,7 @@ Actions runner cost view.
 
 | Runner cost view (A-hold / Ctrl+Alt+B) | Shortcut cheat sheet (Ctrl+Alt+H) |
 |---|---|
-| ![Runner cost view: runner busy, cost per 30 min for GitHub-hosted vs self-hosted](docs/img/runner-view.png) | ![Cheat sheet of keyboard shortcuts and badge buttons](docs/img/cheat-sheet.png) |
+| ![Runner view: status, seven days of minutes, monthly share and billed budget](docs/img/runner-view.png) | ![Cheat sheet of keyboard shortcuts and badge buttons](docs/img/cheat-sheet.png) |
 
 Both are drawn natively at the badge's 320×240 (shown here at 2×; the runner view uses demo data).
 
@@ -88,17 +88,60 @@ installer (`host/install_windows.ps1`) exists but is untested on real Windows.
 
 ## Runner cost view
 
-A badge-native 320×240 screen: runner state (idle / busy + current job), two bar strips of estimated
-cost per 30 minutes over the last 12 hours (GitHub-hosted vs. what the self-hosted runner saved, on
-one shared scale), and month-to-date billed totals. GitHub is polled every 30 minutes and the
-runner's local systemd/journald state every 10 seconds. When the terminal dashboard window is on
-screen, the badge shows this view instead of the (unreadable at 320×240) terminal.
+A native 320×240 view of runner status, usage and budget (screenshots use generic fixture data).
+The header shows the runtime runner name, one status and the current month. Status priority is
+**SERVICE DOWN / OFFLINE age → STALE age → n WAITING → BUSY elapsed → IDLE**. Stale means
+GitHub data is older than twice the configured refresh interval, a fetch failed, or collection
+is incomplete. Waiting counts self-hosted jobs queued for more than ten minutes. Offline age
+starts when this process observes the offline state; it is not an inferred outage start.
 
-It reuses your own dashboard script as a Python module (configured via `find-dashboard` or
-`"runner_view": {"script": ...}`), so tokens and org/repo settings stay in one place. The module
-must provide: `load_token`, `TOKEN_FILE`, `CACHE_FILE`, `UTC`, `SELF_HOSTED_SINCE`, `Api`, `State`,
-`fetch_billing`, `fetch_runners`, `fetch_runs`, `fetch_local` and `compute` (see
-`host/dc32host/runner_view.py` for the fields used). No script, no runner view; everything else works.
+The **week** row shows the last seven local-calendar days, with today bold at the right. Each
+pair compares orange self-hosted minutes and blue GitHub minutes on one shared scale. Both
+round each executed job up to a whole minute. The **month** row shows their month-to-date share;
+zero usage leaves an empty track. The bottom shows **billed MTD net** and the configured budget,
+or **no budget set**. Job-derived minutes and billing can differ because of discounts and billing lag.
+
+GitHub refreshes every 30 minutes by default; the local systemd/journald probe runs every ten
+seconds. Failed/partial fetches preserve the last successful fetch time. Errors appear through
+the status word. Hold **A** or use **Ctrl+Alt+B** to toggle the view; button mappings are unchanged.
+When the terminal dashboard is on screen, the badge uses this native view.
+
+It imports the configured dashboard Python file: `runner_view.script` takes precedence, otherwise
+the `.py` argument in the dashboard favorite is used (`dc32host find-dashboard --write` configures
+the favorite). The module must provide `load_token`, `TOKEN_FILE`, `CACHE_FILE`, `UTC`,
+`SELF_HOSTED_SINCE`, `Api`, `State`, `fetch_billing`, `fetch_runners`, `fetch_runs`, `fetch_local`
+and `compute`. `month_label` retains the dashboard's full month/year label; on month rollover
+old totals are withheld until that month is fetched. Its result must retain billing/runner/queue fields and provide:
+
+- `days7`: seven `{date, weekday_letter, self_min, gh_min}` records, oldest first, local calendar.
+- `month_min`: `{self_min, gh_min}`, with the same per-job rounding.
+- `actions_net`: billed MTD net; `budget`: `{amount: ...}` or `None`.
+- `queue.self_over_10m`: count of self-hosted jobs waiting longer than ten minutes.
+
+Update that configured file as well as this checkout, then restart the host daemon. The Linux
+installer uses an XDG autostart restart loop, not a systemd badge service. In the desktop session,
+`pkill -f 'python.*-m dc32host run'` lets that loop restart the daemon within three seconds.
+No runner service restart or firmware flash is needed. A missing/older module reports STALE;
+other badge views remain usable. The module continues to own credentials and repository settings.
+
+Fixture renders and headless tests:
+
+```sh
+python -m pytest tests/
+python tests/test_runner_view.py --render
+```
+
+On Linux, renders use the same DejaVu fonts as the view. Other hosts can set `DC32_TEST_FONT_DIR`
+to a directory containing `DejaVuSans.ttf` and `DejaVuSans-Bold.ttf`. PNGs are 2× nearest-neighbour
+upscales of the native framebuffer; no live snapshot or credential is used.
+
+| Idle | Busy | Waiting |
+|---|---|---|
+| ![Idle](docs/img/runner-view-idle.png) | ![Busy](docs/img/runner-view-busy.png) | ![Waiting](docs/img/runner-view-waiting.png) |
+
+| Stale | Service down | Zero data | No budget |
+|---|---|---|---|
+| ![Stale](docs/img/runner-view-stale.png) | ![Service down](docs/img/runner-view-service-down.png) | ![Zero data](docs/img/runner-view-zero-data.png) | ![No budget](docs/img/runner-view-no-budget.png) |
 
 ## Layout
 
