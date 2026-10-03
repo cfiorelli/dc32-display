@@ -19,3 +19,5 @@ firmware/dist/*
 !firmware/dist/dc32_display.sha256
 !firmware/dist/BUILDINFO.txt
 docs/LOCAL_NOTES.md
+# local Claude Code state (settings, agent worktrees)
+.claude/
