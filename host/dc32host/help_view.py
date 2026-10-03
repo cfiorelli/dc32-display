@@ -8,7 +8,7 @@ from . import capture as C
 from .runner_view import BG, INK, INK2, MUTED, GRID, HOSTED, _ttf
 
 KEYS = [("B", "runner view"), ("H", "this help"), ("Z", "zoom"), ("X", "fit"),
-        ("I J K L", "move view"), ("", "")]
+        ("I J K L", "move view"), ("G", "lights")]
 BADGE = [("FN", "menu"), ("A", "zoom"), ("A hold", "runner view"), ("B", "fit / back"),
          ("SELECT", "prev app"), ("START", "app list"), ("D-pad", "move view"), ("FN+B", "info"),
          ("FN+Up/Dn", "bright"), ("SEL hold", "pin mode")]

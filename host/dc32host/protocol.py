@@ -17,7 +17,7 @@ HDR = struct.Struct("<BBHI")
 # host -> badge
 SYNC, HELLO, PING = 0x00, 0x01, 0x02
 RECT_RAW, RECT_RLE, FILL, COPY, FRAME_END = 0x10, 0x11, 0x12, 0x13, 0x14
-MENU_LIST, MENU_CLOSE, SET_BRIGHTNESS, SET_TIMING = 0x20, 0x21, 0x22, 0x23
+MENU_LIST, MENU_CLOSE, SET_BRIGHTNESS, SET_TIMING, SET_LEDS = 0x20, 0x21, 0x22, 0x23, 0x24
 REBOOT = 0x7E
 # badge -> host
 INFO, BUTTON, ACK, MENU_RESULT, PONG, ERROR = 0x80, 0x81, 0x82, 0x83, 0x84, 0x8F
@@ -85,6 +85,12 @@ def menu_list(title: str, entries: list[tuple[int, int, str]], selected: int = 0
 
 def menu_close() -> bytes:
     return msg(MENU_CLOSE)
+
+
+def set_leds(colors) -> bytes:
+    """colors: up to 9 (r, g, b) tuples. Firmware >= 0.2; older firmware ignores the message."""
+    colors = list(colors)[:9]
+    return msg(SET_LEDS, bytes([len(colors)]) + bytes(max(0, min(255, int(v))) for c in colors for v in c))
 
 
 def set_brightness(level: int) -> bytes:

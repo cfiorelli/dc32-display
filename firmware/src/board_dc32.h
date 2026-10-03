@@ -10,6 +10,7 @@
 #define PIN_LCD_BL      10      // PWM slice 5, channel A
 
 #define PIN_SELF_PWR    11      // power latch: drive high to stay on
+#define PIN_WS2812      4       // 9 WS2812 RGB LEDs (GRB, 800 kHz)
 
 #define PIN_BTN_RIGHT   16
 #define PIN_BTN_DOWN    17
