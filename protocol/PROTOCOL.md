@@ -43,6 +43,7 @@ so the hunt is exact.
 | 0x20 | MENU_LIST | u8 kind, u8 count, u8 selected, u8 title_len, title, then per entry: u32 id, u8 flags (1 active, 2 favorite, 4 pinned), u8 name_len, name (ASCII ≤40) |
 | 0x21 | MENU_CLOSE | – |
 | 0x22 | SET_BRIGHTNESS | u8 0..31 |
+| 0x24 | SET_LEDS | u8 n, then n × (r, g, b), n ≤ 9 (fw ≥ 0.2). Front LEDs 0,2,4,5,6; rear 1,3,7,8. The badge caps total brightness for USB power and turns the LEDs off when the host goes quiet. |
 | 0x23 | SET_TIMING | u16 long_press_ms, u16 repeat_delay_ms, u16 repeat_ms, u16 reserved |
 | 0x7E | REBOOT | u8 kind (0 app, 1 BOOTSEL) + `"BOOT"` |
 

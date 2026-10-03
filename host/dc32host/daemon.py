@@ -106,6 +106,10 @@ class Daemon:
         self.last_key_t = 0.0
         self._in_mark = None
         self.ctl_q: queue.Queue = queue.Queue()
+        from .lights import Lights
+        self.lights = Lights(cfg.get("lights_mode", "off"))
+        self._leds_last = None
+        self._leds_t = 0.0
         self.last_badge_input = time.time()
         self.dimmed = False
         self._dim_check = 0.0
@@ -156,6 +160,36 @@ class Daemon:
         elif self.dimmed and idle < after:
             self.dimmed = False
             self.send(P.set_brightness(self.brightness))
+
+    def _save_pref(self, key, value):
+        """Persist a user preference (e.g. lights mode) into config.json without touching the rest."""
+        try:
+            import json
+            path = CFG.config_path()
+            with open(path, encoding="utf-8") as f:
+                user = json.load(f)              # the raw file, so defaults don't get frozen into it
+            user[key] = value
+            CFG.save(user, path)
+        except Exception as e:
+            log.warning("could not save %s: %s", key, e)
+
+    def update_leds(self):
+        now = time.time()
+        if now - self._leds_t < 1 / 30:
+            return
+        self._leds_t = now
+        loc = None
+        if self.lights.mode == "runner":
+            try:
+                loc = self._runner().data.snapshot()[1]
+            except Exception:
+                loc = {}
+        cols = self.lights.frame(now, loc)
+        if self.dimmed:
+            cols = [tuple(v // 4 for v in c) for c in cols]
+        if cols != self._leds_last:
+            self._leds_last = cols
+            self.send(P.set_leds(cols))
 
     def run_control(self):
         while True:
@@ -304,6 +338,20 @@ class Daemon:
             self.set_view("mirror")
         elif name in ("help", "toggle_help"):
             self.set_view(self.prev_view if self.view == "help" else "help")
+        elif name in ("lights_next", "lights_cycle"):
+            from .lights import LABELS
+            self.lights.next_mode()
+            self._leds_last = None
+            self.say(LABELS[self.lights.mode])
+            self.cfg["lights_mode"] = self.lights.mode
+            self._save_pref("lights_mode", self.lights.mode)
+        elif name.startswith("lights:"):
+            from .lights import MODES, LABELS
+            if name[7:] in MODES:
+                self.lights.mode = name[7:]
+                self._leds_last = None
+                self.say(LABELS[self.lights.mode])
+                self._save_pref("lights_mode", self.lights.mode)
         elif name in ("pause", "toggle_pause"):
             self.set_view("mirror" if self.view == "paused" else "paused")
         elif name == "badge_terminal":
@@ -414,6 +462,7 @@ class Daemon:
             (f"Zoom: {self.vp.zoom} (A cycles)", "zoom_cycle", False),
             ("Open dashboard on PC", "open_dashboard", False),
             ("Resume display" if self.view == "paused" else "Pause display", "toggle_pause", self.view == "paused"),
+            (f"Lights: {self.lights.mode} (Ctrl+Alt+G)", "lights_next", self.lights.mode != "off"),
             ("Shortcuts (Ctrl+Alt+H)", "toggle_help", self.view == "help"),
             ("Status info", "info", False),
         ]
@@ -695,6 +744,7 @@ class Daemon:
     def tick(self):
         self.run_control()
         self.idle_dim()
+        self.update_leds()
         now = time.time()
         if self.menu_open_until and now < self.menu_open_until:
             if now - self.last_ping > 1.0:
@@ -771,6 +821,7 @@ class Daemon:
         self.menu_open_until = 0.0
         self.dimmed = False
         self.last_badge_input = time.time()
+        self._leds_last = None
         self.send(P.set_brightness(self.brightness) + P.set_timing(int(self.cfg.get("long_press_ms", 600)), 400, 90))
         self.say(f"DC32 Display host {__version__}", f"fw {self.badge.info.fw}")
 

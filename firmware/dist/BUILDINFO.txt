@@ -1,6 +1,6 @@
-built: 2026-10-01T13:57:19Z
-git: (pre-publication tree; firmware/ and protocol/ identical to the first public commit)
+built: 2026-10-01T23:55:29Z
+git: 4bb9ea6009537d27e9a4f00ef5fcf7935760ba2c
 pico-sdk: 2.2.0
-toolchain: arm-none-eabi-gcc (15:13.2.rel1-2) 13.2.1 20231009
+toolchain: arm-none-eabi-gcc (15:10.3-2021.07-4) 10.3.1 20210621 (release)
    text	   data	    bss	    dec	    hex	filename
-  40992	      0	 177236	 218228	  35474	firmware/build/dc32_display.elf
+  41632	      0	 176832	 218464	  35560	firmware/build/dc32_display.elf

@@ -28,6 +28,7 @@ DEFAULTS = {
     "brightness": 22,                 # 0..31
     "dim_after_s": 600,               # dim the badge backlight after this long without PC/badge input (0 = never)
     "dim_brightness": 2,
+    "lights_mode": "off",             # off | bright | wave | rainbow | rave | runner  (Ctrl+Alt+G cycles)
     "show_cursor": True,
     "cursor_only_when_moving_s": 3.0, # hide the cursor overlay this long after it stops (0 = always)
     "letterbox_color": [0, 0, 0],

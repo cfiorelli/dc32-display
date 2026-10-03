@@ -27,5 +27,7 @@ cp "$B/dc32_display.uf2" "$B/dc32_display.elf" "$B/dc32_display.bin" "$D/"
   (cd "$ROOT" && arm-none-eabi-size firmware/build/dc32_display.elf)
 } > "$D/BUILDINFO.txt"
 # static checks: native decoder/encoder round-trip tests
-python3 "$ROOT/tests/test_protocol.py"
+PY=python3
+[ -x "$HOME/.local/share/dc32-display/venv/bin/python" ] && PY="$HOME/.local/share/dc32-display/venv/bin/python"   # has numpy
+"$PY" "$ROOT/tests/test_protocol.py"
 cat "$D/dc32_display.sha256"

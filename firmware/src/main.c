@@ -8,6 +8,7 @@
 #include "hardware/clocks.h"
 #include "hardware/gpio.h"
 #include "hardware/watchdog.h"
+#include "leds.h"
 #include "tusb.h"
 
 #include "board_dc32.h"
@@ -157,7 +158,8 @@ static void on_msg(decoder_t *d, uint8_t type, const uint8_t *p, uint32_t len)
     (void)d;
     switch (type) {
     case DC32_MSG_HELLO:
-        dbg("HELLO proto=%u", len >= 2 ? (unsigned)(p[0] | (p[1] << 8)) : 0u);
+        dbg("HELLO proto=%u (last reset: %s)", len >= 2 ? (unsigned)(p[0] | (p[1] << 8)) : 0u,
+            s_note ? s_note : "power-on / reboot");
         send_info();
         break;
     case DC32_MSG_PING: {
@@ -180,6 +182,9 @@ static void on_msg(decoder_t *d, uint8_t type, const uint8_t *p, uint32_t len)
         break;
     case DC32_MSG_MENU_CLOSE:
         if (s_screen == SCR_MENU) { s_menu.open = false; enter_screen(SCR_STREAM); }
+        break;
+    case DC32_MSG_SET_LEDS:
+        if (len >= 1 && len >= 1u + 3u * p[0]) leds_set(p + 1, p[0]);
         break;
     case DC32_MSG_SET_BRIGHTNESS:
         if (len >= 1) lcd_set_brightness(p[0]);
@@ -265,8 +270,9 @@ int main(void)
     // 2) stock firmware runs at 125 MHz; the LCD PIO timing is derived from it.
     set_sys_clock_khz(125000, true);
 
-    bool wd_reboot = watchdog_caused_reboot();
+    bool wd_reboot = watchdog_enable_caused_reboot();   // a real timeout, not picotool/BOOTSEL reboots
     lcd_init();
+    leds_init();
     ui_init(lcd_fb());
     buttons_init();
     dec_init(&s_dec, lcd_fb());
@@ -324,6 +330,7 @@ int main(void)
         if (s_host_alive && (!mounted || now - s_last_host_ms > HOST_TIMEOUT_MS)) {
             s_host_alive = false;
             dbg("host timeout");
+            leds_off();
             enter_screen(SCR_DISCONNECTED);
         }
 
