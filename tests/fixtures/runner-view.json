@@ -1,0 +1,571 @@
+{
+  "idle": {
+    "now": "2026-10-03T13:30:00+00:00",
+    "refresh_s": 1800,
+    "updated": "2026-10-03T13:30:00+00:00",
+    "error": null,
+    "local": {
+      "units": [
+        {
+          "unit": "actions.runner.example.my-runner.service",
+          "active": "active",
+          "sub": "running"
+        }
+      ],
+      "current": null
+    },
+    "v": {
+      "runner_api": {
+        "name": "my-runner",
+        "status": "online",
+        "busy": false
+      },
+      "actions_net": 24.62,
+      "billing_ok": true,
+      "budget": {
+        "amount": 250
+      },
+      "queue": {
+        "self": 0,
+        "self_over_10m": 0
+      },
+      "month_min": {
+        "self_min": 710,
+        "gh_min": 290
+      },
+      "days7": [
+        {
+          "date": "2026-09-27",
+          "weekday_letter": "S",
+          "self_min": 28,
+          "gh_min": 12
+        },
+        {
+          "date": "2026-09-28",
+          "weekday_letter": "M",
+          "self_min": 62,
+          "gh_min": 8
+        },
+        {
+          "date": "2026-09-29",
+          "weekday_letter": "T",
+          "self_min": 52,
+          "gh_min": 42
+        },
+        {
+          "date": "2026-09-30",
+          "weekday_letter": "W",
+          "self_min": 36,
+          "gh_min": 6
+        },
+        {
+          "date": "2026-10-01",
+          "weekday_letter": "T",
+          "self_min": 17,
+          "gh_min": 4
+        },
+        {
+          "date": "2026-10-02",
+          "weekday_letter": "F",
+          "self_min": 12,
+          "gh_min": 5
+        },
+        {
+          "date": "2026-10-03",
+          "weekday_letter": "S",
+          "self_min": 20,
+          "gh_min": 8
+        }
+      ],
+      "month_label": "October 2026"
+    }
+  },
+  "busy": {
+    "now": "2026-10-03T13:30:00+00:00",
+    "refresh_s": 1800,
+    "updated": "2026-10-03T13:30:00+00:00",
+    "error": null,
+    "local": {
+      "units": [
+        {
+          "unit": "actions.runner.example.my-runner.service",
+          "active": "active",
+          "sub": "running"
+        }
+      ],
+      "current": {
+        "job": "build",
+        "since": "2026-10-03T13:26:00+00:00"
+      }
+    },
+    "v": {
+      "runner_api": {
+        "name": "my-runner",
+        "status": "online",
+        "busy": true
+      },
+      "actions_net": 24.62,
+      "billing_ok": true,
+      "budget": {
+        "amount": 250
+      },
+      "queue": {
+        "self": 0,
+        "self_over_10m": 0
+      },
+      "month_min": {
+        "self_min": 710,
+        "gh_min": 290
+      },
+      "days7": [
+        {
+          "date": "2026-09-27",
+          "weekday_letter": "S",
+          "self_min": 28,
+          "gh_min": 12
+        },
+        {
+          "date": "2026-09-28",
+          "weekday_letter": "M",
+          "self_min": 62,
+          "gh_min": 8
+        },
+        {
+          "date": "2026-09-29",
+          "weekday_letter": "T",
+          "self_min": 52,
+          "gh_min": 42
+        },
+        {
+          "date": "2026-09-30",
+          "weekday_letter": "W",
+          "self_min": 36,
+          "gh_min": 6
+        },
+        {
+          "date": "2026-10-01",
+          "weekday_letter": "T",
+          "self_min": 17,
+          "gh_min": 4
+        },
+        {
+          "date": "2026-10-02",
+          "weekday_letter": "F",
+          "self_min": 12,
+          "gh_min": 5
+        },
+        {
+          "date": "2026-10-03",
+          "weekday_letter": "S",
+          "self_min": 20,
+          "gh_min": 8
+        }
+      ],
+      "month_label": "October 2026"
+    }
+  },
+  "waiting": {
+    "now": "2026-10-03T13:30:00+00:00",
+    "refresh_s": 1800,
+    "updated": "2026-10-03T13:30:00+00:00",
+    "error": null,
+    "local": {
+      "units": [
+        {
+          "unit": "actions.runner.example.my-runner.service",
+          "active": "active",
+          "sub": "running"
+        }
+      ],
+      "current": null
+    },
+    "v": {
+      "runner_api": {
+        "name": "my-runner",
+        "status": "online",
+        "busy": false
+      },
+      "actions_net": 24.62,
+      "billing_ok": true,
+      "budget": {
+        "amount": 250
+      },
+      "queue": {
+        "self": 3,
+        "self_over_10m": 2,
+        "oldest_self": "2026-10-03T13:12:00+00:00"
+      },
+      "month_min": {
+        "self_min": 710,
+        "gh_min": 290
+      },
+      "days7": [
+        {
+          "date": "2026-09-27",
+          "weekday_letter": "S",
+          "self_min": 28,
+          "gh_min": 12
+        },
+        {
+          "date": "2026-09-28",
+          "weekday_letter": "M",
+          "self_min": 62,
+          "gh_min": 8
+        },
+        {
+          "date": "2026-09-29",
+          "weekday_letter": "T",
+          "self_min": 52,
+          "gh_min": 42
+        },
+        {
+          "date": "2026-09-30",
+          "weekday_letter": "W",
+          "self_min": 36,
+          "gh_min": 6
+        },
+        {
+          "date": "2026-10-01",
+          "weekday_letter": "T",
+          "self_min": 17,
+          "gh_min": 4
+        },
+        {
+          "date": "2026-10-02",
+          "weekday_letter": "F",
+          "self_min": 12,
+          "gh_min": 5
+        },
+        {
+          "date": "2026-10-03",
+          "weekday_letter": "S",
+          "self_min": 20,
+          "gh_min": 8
+        }
+      ],
+      "month_label": "October 2026"
+    }
+  },
+  "stale": {
+    "now": "2026-10-03T13:30:00+00:00",
+    "refresh_s": 1800,
+    "updated": "2026-10-03T12:25:00+00:00",
+    "error": null,
+    "local": {
+      "units": [
+        {
+          "unit": "actions.runner.example.my-runner.service",
+          "active": "active",
+          "sub": "running"
+        }
+      ],
+      "current": null
+    },
+    "v": {
+      "runner_api": {
+        "name": "my-runner",
+        "status": "online",
+        "busy": false
+      },
+      "actions_net": 24.62,
+      "billing_ok": true,
+      "budget": {
+        "amount": 250
+      },
+      "queue": {
+        "self": 0,
+        "self_over_10m": 0
+      },
+      "month_min": {
+        "self_min": 710,
+        "gh_min": 290
+      },
+      "days7": [
+        {
+          "date": "2026-09-27",
+          "weekday_letter": "S",
+          "self_min": 28,
+          "gh_min": 12
+        },
+        {
+          "date": "2026-09-28",
+          "weekday_letter": "M",
+          "self_min": 62,
+          "gh_min": 8
+        },
+        {
+          "date": "2026-09-29",
+          "weekday_letter": "T",
+          "self_min": 52,
+          "gh_min": 42
+        },
+        {
+          "date": "2026-09-30",
+          "weekday_letter": "W",
+          "self_min": 36,
+          "gh_min": 6
+        },
+        {
+          "date": "2026-10-01",
+          "weekday_letter": "T",
+          "self_min": 17,
+          "gh_min": 4
+        },
+        {
+          "date": "2026-10-02",
+          "weekday_letter": "F",
+          "self_min": 12,
+          "gh_min": 5
+        },
+        {
+          "date": "2026-10-03",
+          "weekday_letter": "S",
+          "self_min": 20,
+          "gh_min": 8
+        }
+      ],
+      "month_label": "October 2026"
+    }
+  },
+  "service-down": {
+    "now": "2026-10-03T13:30:00+00:00",
+    "refresh_s": 1800,
+    "updated": "2026-10-03T13:30:00+00:00",
+    "error": null,
+    "local": {
+      "units": [
+        {
+          "unit": "actions.runner.example.my-runner.service",
+          "active": "inactive",
+          "sub": "dead"
+        }
+      ],
+      "current": null
+    },
+    "v": {
+      "runner_api": {
+        "name": "my-runner",
+        "status": "online",
+        "busy": false
+      },
+      "actions_net": 24.62,
+      "billing_ok": true,
+      "budget": {
+        "amount": 250
+      },
+      "queue": {
+        "self": 0,
+        "self_over_10m": 0
+      },
+      "month_min": {
+        "self_min": 710,
+        "gh_min": 290
+      },
+      "days7": [
+        {
+          "date": "2026-09-27",
+          "weekday_letter": "S",
+          "self_min": 28,
+          "gh_min": 12
+        },
+        {
+          "date": "2026-09-28",
+          "weekday_letter": "M",
+          "self_min": 62,
+          "gh_min": 8
+        },
+        {
+          "date": "2026-09-29",
+          "weekday_letter": "T",
+          "self_min": 52,
+          "gh_min": 42
+        },
+        {
+          "date": "2026-09-30",
+          "weekday_letter": "W",
+          "self_min": 36,
+          "gh_min": 6
+        },
+        {
+          "date": "2026-10-01",
+          "weekday_letter": "T",
+          "self_min": 17,
+          "gh_min": 4
+        },
+        {
+          "date": "2026-10-02",
+          "weekday_letter": "F",
+          "self_min": 12,
+          "gh_min": 5
+        },
+        {
+          "date": "2026-10-03",
+          "weekday_letter": "S",
+          "self_min": 20,
+          "gh_min": 8
+        }
+      ],
+      "month_label": "October 2026"
+    }
+  },
+  "zero-data": {
+    "now": "2026-10-03T13:30:00+00:00",
+    "refresh_s": 1800,
+    "updated": "2026-10-03T13:30:00+00:00",
+    "error": null,
+    "local": {
+      "units": [
+        {
+          "unit": "actions.runner.example.my-runner.service",
+          "active": "active",
+          "sub": "running"
+        }
+      ],
+      "current": null
+    },
+    "v": {
+      "runner_api": {
+        "name": "my-runner",
+        "status": "online",
+        "busy": false
+      },
+      "actions_net": 0,
+      "billing_ok": true,
+      "budget": {
+        "amount": 250
+      },
+      "queue": {
+        "self": 0,
+        "self_over_10m": 0
+      },
+      "month_min": {
+        "self_min": 0,
+        "gh_min": 0
+      },
+      "days7": [
+        {
+          "date": "2026-09-27",
+          "weekday_letter": "S",
+          "self_min": 0,
+          "gh_min": 0
+        },
+        {
+          "date": "2026-09-28",
+          "weekday_letter": "M",
+          "self_min": 0,
+          "gh_min": 0
+        },
+        {
+          "date": "2026-09-29",
+          "weekday_letter": "T",
+          "self_min": 0,
+          "gh_min": 0
+        },
+        {
+          "date": "2026-09-30",
+          "weekday_letter": "W",
+          "self_min": 0,
+          "gh_min": 0
+        },
+        {
+          "date": "2026-10-01",
+          "weekday_letter": "T",
+          "self_min": 0,
+          "gh_min": 0
+        },
+        {
+          "date": "2026-10-02",
+          "weekday_letter": "F",
+          "self_min": 0,
+          "gh_min": 0
+        },
+        {
+          "date": "2026-10-03",
+          "weekday_letter": "S",
+          "self_min": 0,
+          "gh_min": 0
+        }
+      ],
+      "month_label": "October 2026"
+    }
+  },
+  "no-budget": {
+    "now": "2026-10-03T13:30:00+00:00",
+    "refresh_s": 1800,
+    "updated": "2026-10-03T13:30:00+00:00",
+    "error": null,
+    "local": {
+      "units": [
+        {
+          "unit": "actions.runner.example.my-runner.service",
+          "active": "active",
+          "sub": "running"
+        }
+      ],
+      "current": null
+    },
+    "v": {
+      "runner_api": {
+        "name": "my-runner",
+        "status": "online",
+        "busy": false
+      },
+      "actions_net": 24.62,
+      "billing_ok": true,
+      "budget": null,
+      "queue": {
+        "self": 0,
+        "self_over_10m": 0
+      },
+      "month_min": {
+        "self_min": 710,
+        "gh_min": 290
+      },
+      "days7": [
+        {
+          "date": "2026-09-27",
+          "weekday_letter": "S",
+          "self_min": 28,
+          "gh_min": 12
+        },
+        {
+          "date": "2026-09-28",
+          "weekday_letter": "M",
+          "self_min": 62,
+          "gh_min": 8
+        },
+        {
+          "date": "2026-09-29",
+          "weekday_letter": "T",
+          "self_min": 52,
+          "gh_min": 42
+        },
+        {
+          "date": "2026-09-30",
+          "weekday_letter": "W",
+          "self_min": 36,
+          "gh_min": 6
+        },
+        {
+          "date": "2026-10-01",
+          "weekday_letter": "T",
+          "self_min": 17,
+          "gh_min": 4
+        },
+        {
+          "date": "2026-10-02",
+          "weekday_letter": "F",
+          "self_min": 12,
+          "gh_min": 5
+        },
+        {
+          "date": "2026-10-03",
+          "weekday_letter": "S",
+          "self_min": 20,
+          "gh_min": 8
+        }
+      ],
+      "month_label": "October 2026"
+    }
+  }
+}
