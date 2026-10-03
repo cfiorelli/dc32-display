@@ -60,7 +60,7 @@ DEFAULTS = {
         "start.long": "pin_current",
         "a.short": "zoom_cycle",
         "a.long": "toggle_runner",     # badge-native runner costs view (A-hold again: back to mirror)
-        "b.short": "zoom_fit",
+        "b.short": "back",         # leave runner/help/pause view > un-zoom > send Esc
         "b.long": "refresh",
         "fn.short": "home_menu",       # Mirror / Runner costs / Badge terminal / Apps / Pause / Info
         "up.down": "pan_up", "up.repeat": "pan_up",
@@ -114,6 +114,8 @@ def load(path: str | None = None) -> dict:
         return copy.deepcopy(DEFAULTS)
     if int(user.get("version", 1)) < 2:
         _migrate_v2(user)
+    if (user.get("buttons") or {}).get("b.short") == "zoom_fit":   # B used to only un-zoom
+        user["buttons"]["b.short"] = "back"
         try:
             save(user, path)
         except OSError as e:
