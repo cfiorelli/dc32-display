@@ -1,19 +1,7 @@
-"""Badge-native GitHub runner view: drawn at the badge's own 320x240, so nothing is scaled.
+"""Native 320x240 runner status, seven local days, month share and billed budget.
 
-Data comes from the user's terminal dashboard script (the runner-cost dashboard favorite), imported as a
-module so the token handling, org/repo list and cost rules stay in one place. GitHub is polled every
-`refresh_s` (default 30 min); the runner's local state (systemd/journald) every 10 s.
-
-    +--------------------------------------------+
-    | * my-runner    BUSY 4m            14:05    |  runner state (status colour + word)
-    |   build / test-linux                       |  current job, or the last one
-    | GitHub-hosted          $0.42 / 12h         |  strip 1: est. hosted cost per 30 min
-    | ||  |   ||||    |                          |
-    | Self-hosted (saved)    $1.10 / 12h         |  strip 2: what the Dell saved per 30 min
-    |  |||| ||   |||||||  |                      |
-    | -12h            -6h                   now  |
-    | Month $12.34  saved $5.67     upd 13:30    |
-    +--------------------------------------------+
+The configured dashboard module owns collection and accounting. GitHub refreshes every
+30 minutes by default; the local systemd/journald probe runs every 10 seconds.
 """
 from __future__ import annotations
 
@@ -34,8 +22,6 @@ from . import capture as C
 log = logging.getLogger("dc32.runner")
 
 W, H = C.OUT_W, C.OUT_H
-BUCKET_MIN = 30
-BUCKETS = 24                         # 12 hours
 # dark chart surface + categorical slots 1/2 (validated pair), text inks, reserved status colours
 BG = (26, 26, 25)
 INK = (255, 255, 255)
@@ -102,17 +88,19 @@ class RunnerData:
             cache.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(m.CACHE_FILE, cache)
         self.mod, self.api = m, m.Api("https://api.github.com", tok)
-        self.st = m.State(now.year, now.month, m.SELF_HOSTED_SINCE, cache)
+        local_now = now.astimezone()
+        self.st = m.State(local_now.year, local_now.month, m.SELF_HOSTED_SINCE, cache)
 
     def _gh_loop(self):
         while True:
             if time.time() >= self.next_at:
                 try:
-                    if self.mod is None:
+                    if self.st is None or self.api is None:
                         self._setup()
                     m, st = self.mod, self.st
                     now = dt.datetime.now(m.UTC)
-                    if (now.year, now.month) != (st.year, st.month):
+                    local_now = now.astimezone()
+                    if (local_now.year, local_now.month) != (st.year, st.month):
                         self._setup()
                         st = self.st
                     m.fetch_billing(st, self.api)
@@ -120,9 +108,7 @@ class RunnerData:
                     m.fetch_runs(st, self.api, now, max_job_calls=80)
                     v = m.compute(st, dt.datetime.now(m.UTC))
                     done, total = v.get("backfill", (0, 0))
-                    with self.lock:
-                        self.v, self.updated = v, dt.datetime.now()
-                        self.error = st.billing_err or st.jobs_err
+                    self._publish(v, st, dt.datetime.now(m.UTC))
                     # backfill quickly at first, then the configured cadence
                     self.next_at = time.time() + (20 if done < total else self.refresh_s)
                     log.info("runner data: hosted MTD $%.2f, backfill %s/%s, api calls %s",
@@ -134,6 +120,21 @@ class RunnerData:
                     self.next_at = time.time() + 300
             self._kick.wait(5)
             self._kick.clear()
+
+    def _publish(self, v, st, now):
+        """Publish a snapshot without letting a failed/partial fetch reset its age."""
+        done, total = v.get("backfill", (0, 0))
+        with self.lock:
+            runner = v.get("runner_api") or {}
+            previous = (self.v or {}).get("runner_api") or {}
+            if runner.get("status") == "offline":
+                same = previous.get("status") == "offline" and previous.get("name") == runner.get("name")
+                runner["offline_since"] = (previous.get("offline_since") if same else None) or now
+            self.v = v
+            self.error = st.billing_err or st.jobs_err or st.runners_err or (
+                st.budget_err if st.budget_err != "no org Actions budget found" else None)
+            if not self.error and done == total:
+                self.updated = now
 
     def _local_loop(self):
         while True:
@@ -152,36 +153,18 @@ class RunnerData:
             return self.v, dict(self.local), self.error, self.updated
 
 
-def buckets(v, now: dt.datetime):
-    """-> (hosted[24], self[24]) estimated dollars per 30-minute bucket, oldest first."""
-    hosted, saved = [0.0] * BUCKETS, [0.0] * BUCKETS
-    if not v:
-        return hosted, saved
-    rates = v.get("rates", {})
-    span = dt.timedelta(minutes=BUCKET_MIN)
-    start = now - span * BUCKETS
-    for r in v.get("recent", []):
-        ts = r.get("ts")
-        if not ts or ts < start or r.get("status") != "completed" or r.get("conclusion") == "skipped":
-            continue
-        i = min(BUCKETS - 1, int((ts - start) / span))
-        sec = r.get("sec") or 0
-        mins = -(-int(sec) // 60) if sec > 0 else 0        # GitHub bills whole minutes, rounded up
-        usd = mins * rates.get(r.get("type"), 0.006)
-        if r.get("prov") == "self":
-            saved[i] += usd
-        else:
-            hosted[i] += r.get("cost") if r.get("cost") is not None else usd
-    return hosted, saved
-
-
 def _money(x):
     return f"${x:,.2f}" if x < 1000 else f"${x:,.0f}"
 
 
 def _ago(seconds):
-    m = int(seconds // 60)
+    m = max(0, int(seconds // 60))
     return f"{m}m" if m < 60 else f"{m // 60}h{m % 60:02d}"
+
+
+def _utc(value):
+    # Old RunnerData snapshots used naive local datetimes.
+    return value.astimezone(dt.timezone.utc) if value else None
 
 
 class RunnerView:
@@ -191,88 +174,126 @@ class RunnerView:
         self.f = _ttf(14)
         self.f_b = _ttf(14, bold=True)
         self.f_s = _ttf(12)
+        self.f_sb = _ttf(12, bold=True)
+        self.f_money = _ttf(30, bold=True)
+        self._offline_since = None
 
-    def render(self) -> np.ndarray:
+    def status(self, v, loc, err, updated, now):
+        """One status, highest priority first. Offline age is observed age, not outage onset."""
+        units = loc.get("units") or []
+        api = (v or {}).get("runner_api") or {}
+        if (units and units[0].get("active") != "active") or (loc and not units):
+            return BAD, "SERVICE DOWN"
+        if api.get("status") == "offline":
+            self._offline_since = _utc(api.get("offline_since")) or self._offline_since or now
+            return BAD, "OFFLINE " + _ago((now - self._offline_since).total_seconds())
+        self._offline_since = None
+        age = max(0, (now - _utc(updated)).total_seconds()) if updated else None
+        backfill = (v or {}).get("backfill", (0, 0))
+        month = now.astimezone().strftime("%B %Y")
+        wrong_month = (v or {}).get("month_label", month) != month
+        if (err or wrong_month or backfill[0] < backfill[1] or age is None or age > 2 * self.data.refresh_s or
+                not v or "days7" not in v or "month_min" not in v or not units):
+            return BAD, "STALE " + (_ago(age) if age is not None else "?")
+        q = v.get("queue") or {}
+        waiting = q.get("self_over_10m", 0)
+        if waiting:
+            return WARN, f"{waiting} WAITING"
+        cur = loc.get("current")
+        if cur or api.get("busy"):
+            since = _utc((cur or {}).get("since"))
+            if since is None:
+                since = next((_utc(r.get("ts")) for r in v.get("recent", [])
+                              if r.get("status") == "in_progress" and r.get("prov") == "self"
+                              and r.get("runner") == api.get("name")), None)
+            return WARN, "BUSY " + (_ago((now - since).total_seconds()) if since else "?")
+        return OK, "IDLE"
+
+    def render(self, now=None) -> np.ndarray:
         v, loc, err, updated = self.data.snapshot()
-        now_utc = dt.datetime.now(dt.timezone.utc)
+        now = _utc(now) or dt.datetime.now(dt.timezone.utc)
         img = Image.new("RGB", (W, H), BG)
         d = ImageDraw.Draw(img)
-
-        # --- runner state (local systemd/journald is authoritative and live) ---
         units = loc.get("units") or []
-        active = units[0]["active"] if units else None
-        cur, last = loc.get("current"), loc.get("last")
-        api_r = (v or {}).get("runner_api") or {}
-        name = api_r.get("name") or (units[0]["unit"].split(".")[-2] if units and units[0]["unit"].count(".") >= 3 else "runner")
-        if active is None:
-            col, word = MUTED, "checking"
-        elif active != "active":
-            col, word = BAD, "SERVICE " + active.upper()
-        elif cur:
-            col, word = WARN, f"BUSY {_ago((now_utc - cur['since']).total_seconds())}"
-        else:
-            col, word = OK, "IDLE"
-        d.ellipse([8, 8, 20, 20], fill=col)
-        d.text((28, 4), name[:16], font=self.f_big, fill=INK)
-        nx = 28 + d.textlength(name[:16], font=self.f_big) + 8
-        d.text((nx, 6), word, font=self.f_b, fill=col if col != MUTED else INK2)
-        clock = time.strftime("%H:%M")
-        d.text((W - 6 - d.textlength(clock, font=self.f), 6), clock, font=self.f, fill=INK2)
-        if cur:
-            line2 = cur["job"]
-        elif last:
-            mark = "ok" if last["result"] == "Succeeded" else last["result"].lower()
-            line2 = f"last: {last['job']} ({mark}, {_ago((now_utc - last['at']).total_seconds())} ago)"
-        else:
-            line2 = "no jobs seen yet"
-        q = (v or {}).get("queue") or {}
-        if q.get("self"):
-            line2 = f"{q['self']} queued | " + line2
-        d.text((8, 28), _fit(d, line2, self.f, W - 16), font=self.f, fill=INK2)
+        api = (v or {}).get("runner_api") or {}
+        name = api.get("name") or (units[0]["unit"].split(".")[-2]
+               if units and units[0].get("unit", "").count(".") >= 3 else "runner")
+        color, word = self.status(v, loc, err, updated, now)
 
-        # --- two strips, one shared $ scale so they compare honestly ---
-        hosted, saved = buckets(v, now_utc)
-        top = max(max(hosted), max(saved), 0.01)
-        self._strip(d, 50, "GitHub-hosted", sum(hosted), hosted, top, HOSTED)
-        self._strip(d, 122, "Self-hosted (saved)", sum(saved), saved, top, SELF)
-        y = 192
-        for i, lab in ((0, "-12h"), (BUCKETS // 2, "-6h"), (BUCKETS, "now")):
-            x = 8 + i * (W - 16) / BUCKETS
-            tw = d.textlength(lab, font=self.f_s)
-            d.text((min(max(8, x - tw / 2), W - 8 - tw), y), lab, font=self.f_s, fill=MUTED)
+        # Header: preserve the status and month even for a long runtime runner name.
+        month = now.astimezone().strftime("%b")
+        mx = W - 8 - d.textlength(month, font=self.f)
+        name = _fit(d, name, self.f_big, mx - 28 - d.textlength(word, font=self.f_b) - 16)
+        d.ellipse([8, 9, 20, 21], fill=color)
+        d.text((28, 4), name, font=self.f_big, fill=INK)
+        nx = 28 + d.textlength(name, font=self.f_big) + 8
+        d.text((nx, 6), word, font=self.f_b, fill=color)
+        d.text((mx, 6), month, font=self.f, fill=INK2)
+        d.line([0, 30, W, 30], fill=GRID)
 
-        # --- footer: month to date from the billing API ---
-        if v:
-            saved_mtd = sum(r.get("saved", 0) for r in v.get("self_rows", {}).values())
-            foot = f"Month billed {_money(v.get('actions_net', 0))}  saved {_money(saved_mtd)}"
+        # Week: two adjacent bars per day on one shared minute scale.
+        d.text((8, 38), "week", font=self.f_s, fill=MUTED)
+        by_date = {r["date"]: r for r in (v or {}).get("days7", [])}
+        today = now.astimezone().date()
+        days = []
+        for offset in range(6, -1, -1):
+            day = today - dt.timedelta(days=offset)
+            days.append({"weekday_letter": "MTWTFSS"[day.weekday()],
+                         **by_date.get(day.isoformat(), {"self_min": 0, "gh_min": 0})})
+        peak = max([r.get(k, 0) for r in days for k in ("self_min", "gh_min")] + [1])
+        x0, x1, base, height = 52, W - 8, 104, 62
+        stride = (x1 - x0) / 7
+        d.line([x0, base, x1, base], fill=GRID)
+        for i, row in enumerate(days):
+            center = x0 + (i + .5) * stride
+            for key, col, offset in (("self_min", SELF, -12), ("gh_min", HOSTED, 1)):
+                val = row.get(key, 0)
+                if val > 0:
+                    h = max(2, round(height * val / peak))
+                    x = round(center + offset)
+                    d.rounded_rectangle([x, base-h, x+11, base-1], radius=2, fill=col)
+            letter = row["weekday_letter"]
+            font = self.f_sb if i == len(days)-1 else self.f_s
+            d.text((center-d.textlength(letter, font=font)/2, 108), letter,
+                   font=font, fill=INK if i == len(days)-1 else MUTED)
+        d.line([0, 128, W, 128], fill=GRID)
+
+        # Month: minute share, including an honest empty track for zero usage.
+        d.text((8, 140), "month", font=self.f_s, fill=MUTED)
+        same_month = (v or {}).get("month_label", now.astimezone().strftime("%B %Y")) == now.astimezone().strftime("%B %Y")
+        mins = ((v or {}).get("month_min") or {}) if same_month else {}
+        own, gh = max(0, mins.get("self_min", 0)), max(0, mins.get("gh_min", 0))
+        total = own + gh
+        pct = round(100 * own / total) if total else 0
+        gpct = 100 - pct if total else 0
+        d.rounded_rectangle([x0, 140, x1, 154], radius=3, fill=GRID)
+        split = x0 + round((x1-x0) * own/total) if total else x0
+        if split > x0:
+            d.rounded_rectangle([x0, 140, split-1, 154], radius=3, fill=SELF)
+        if total and split < x1:
+            d.rounded_rectangle([split, 140, x1, 154], radius=3, fill=HOSTED)
+        d.text((x0, 159), f"self {pct}%", font=self.f_s, fill=INK2)
+        right = f"GitHub {gpct}%"
+        d.text((x1-d.textlength(right, font=self.f_s), 159), right, font=self.f_s, fill=INK2)
+        d.line([0, 180, W, 180], fill=GRID)
+
+        # Footer: actual billed MTD net, never a list-price or savings estimate.
+        amount = _money(v.get("actions_net", 0)) if v and same_month and v.get("billing_ok", True) else "$—"
+        budget = (v or {}).get("budget")
+        label = f"of ${budget['amount']:,.0f} budget" if budget else "no budget set"
+        font = self.f_money
+        if d.textlength(amount, font=font) + d.textlength(label, font=self.f) > W - 30:
+            font = _ttf(24, bold=True)
+        d.text((8, 188), amount, font=font, fill=INK)
+        x = 8 + d.textlength(amount, font=font) + 10
+        # Long currency values retain the full budget text on the second footer line.
+        if x + d.textlength(label, font=self.f) > W - 8:
+            x, y = 8, 222
+            font_label = self.f_s
         else:
-            foot = "waiting for GitHub data..."
-        d.line([0, 210, W, 210], fill=GRID)
-        d.text((8, 216), foot, font=self.f, fill=INK)
-        if err:
-            msg = "! " + err
-            d.text((W - 8 - min(150, d.textlength(msg, font=self.f_s)), 218), _fit(d, msg, self.f_s, 150),
-                   font=self.f_s, fill=BAD)
-        elif updated:
-            u = "upd " + updated.strftime("%H:%M")
-            d.text((W - 8 - d.textlength(u, font=self.f_s), 218), u, font=self.f_s, fill=MUTED)
+            y, font_label = 200, self.f
+        d.text((x, y), label, font=font_label, fill=INK2)
         return np.asarray(img).copy()
-
-    def _strip(self, d, y, label, total, vals, top, color):
-        d.rectangle([8, y + 4, 18, y + 14], fill=color)          # legend key next to the label
-        d.text((24, y), label, font=self.f_b, fill=INK)
-        t = f"{_money(total)} / 12h"
-        d.text((W - 8 - d.textlength(t, font=self.f), y), t, font=self.f, fill=INK)
-        base, hmax = y + 66, 44
-        d.line([8, base, W - 8, base], fill=GRID)
-        bw = (W - 16) / BUCKETS
-        for i, val in enumerate(vals):
-            if val <= 0:
-                continue
-            h = max(2, round(hmax * val / top))
-            x0 = 8 + i * bw + 1
-            x1 = 8 + (i + 1) * bw - 1                              # 2 px gap between bars
-            d.rounded_rectangle([x0, base - h, x1, base - 1], radius=min(3, (x1 - x0) / 2), fill=color)
 
 
 def _fit(d, text, font, width):
