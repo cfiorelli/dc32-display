@@ -192,6 +192,9 @@ class RunnerView:
         backfill = (v or {}).get("backfill", (0, 0))
         month = now.astimezone().strftime("%B %Y")
         wrong_month = (v or {}).get("month_label", month) != month
+        if v and not err and not wrong_month and backfill[0] < backfill[1]:
+            # first fetch / widened history: say how far along, not just "stale" (numbers still partial)
+            return WARN, f"SYNC {100 * backfill[0] // backfill[1]}%"
         if (err or wrong_month or backfill[0] < backfill[1] or age is None or age > 2 * self.data.refresh_s or
                 not v or "days7" not in v or "month_min" not in v or not units):
             return BAD, "STALE " + (_ago(age) if age is not None else "?")
