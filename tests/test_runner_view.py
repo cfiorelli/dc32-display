@@ -141,7 +141,7 @@ class RunnerViewTest(unittest.TestCase):
         st.runners_err=None;v['backfill']=(1,2)
         data._publish(v,st,now+dt.timedelta(minutes=60))
         self.assertEqual(data.updated,now)
-        self.assertTrue(view(data).status(v,decode(FIXTURES['idle']['local']),None,now,now)[1].startswith('STALE'))
+        self.assertEqual(view(data).status(v,decode(FIXTURES['idle']['local']),None,now,now),(rv.WARN,'SYNC 50%'))
 
     def test_midnight_moves_today_to_right_and_drops_oldest_day(self):
         data=Snapshot('idle');v=view(data);texts=[];original=rv.ImageDraw.ImageDraw.text

@@ -30,6 +30,7 @@ DEFAULTS = {
     "dim_brightness": 2,
     "lights_mode": "off",             # off | bright | wave | rainbow | rave | runner  (Ctrl+Alt+G cycles)
     "show_cursor": True,
+    "mouse_moves_view": True,         # zoomed in: pushing the pointer near an edge glides the view (False: keys/D-pad only)
     "cursor_only_when_moving_s": 3.0, # hide the cursor overlay this long after it stops (0 = always)
     "letterbox_color": [0, 0, 0],
     "long_press_ms": 600,
@@ -39,7 +40,9 @@ DEFAULTS = {
     "focus_alt_fallback": True,       # Windows: tap ALT if SetForegroundWindow is refused (foreground-lock workaround)
     "dashboard_favorite": "GitHub Runner Dashboard",
     "runner_view_for_dashboard": True, # show the badge-native runner view instead of the dashboard window
-    "runner_view": {"script": None, "refresh_s": 1800},   # script: defaults to the dashboard favorite's .py
+    # script: defaults to the dashboard favorite's .py. GitHub refresh every 2 h, none 22:00-07:00
+    # (B-hold on the runner view fetches now); quiet_hours: null = always refresh.
+    "runner_view": {"script": None, "refresh_s": 7200, "quiet_hours": [22, 7]},
     "typing_zoom": "1x",              # typing in fit mode zooms to this around the caret (None = off)
     "typing_zoom_hold_s": 0,          # 0: stay zoomed until B; >0: go back to fit after this many idle seconds
     "favorites": [
@@ -60,7 +63,7 @@ DEFAULTS = {
         "start.long": "pin_current",
         "a.short": "zoom_cycle",
         "a.long": "toggle_runner",     # badge-native runner costs view (A-hold again: back to mirror)
-        "b.short": "zoom_fit",
+        "b.short": "back",         # leave runner/help/pause view > un-zoom > send Esc
         "b.long": "refresh",
         "fn.short": "home_menu",       # Mirror / Runner costs / Badge terminal / Apps / Pause / Info
         "up.down": "pan_up", "up.repeat": "pan_up",
@@ -114,6 +117,8 @@ def load(path: str | None = None) -> dict:
         return copy.deepcopy(DEFAULTS)
     if int(user.get("version", 1)) < 2:
         _migrate_v2(user)
+    if (user.get("buttons") or {}).get("b.short") == "zoom_fit":   # B used to only un-zoom
+        user["buttons"]["b.short"] = "back"
         try:
             save(user, path)
         except OSError as e:

@@ -1,7 +1,8 @@
 """Native 320x240 runner status, seven local days, month share and billed budget.
 
 The configured dashboard module owns collection and accounting. GitHub refreshes every
-30 minutes by default; the local systemd/journald probe runs every 10 seconds.
+2 hours by default and not at all during quiet hours (22:00-07:00 local; B-hold forces one);
+the local systemd/journald probe runs every 10 seconds.
 """
 from __future__ import annotations
 
@@ -51,8 +52,12 @@ def load_dashboard_module(path: str):
 class RunnerData:
     """Background fetcher. `snapshot()` never blocks on the network."""
 
-    def __init__(self, script: str, refresh_s: int = 1800, local_s: int = 10):
+    def __init__(self, script: str, refresh_s: int = 7200, local_s: int = 10, quiet_hours=(22, 7)):
         self.script, self.refresh_s, self.local_s = script, refresh_s, local_s
+        self.quiet_hours = tuple(quiet_hours) if quiet_hours else None   # (start, end) local hours
+        self.fetching = False
+        self._forced = False
+        self._synced = False           # backfill complete: scheduled refreshes may wait for quiet hours
         self.lock = threading.Lock()
         self.v = None                  # dashboard compute() result
         self.local = {}
@@ -74,7 +79,21 @@ class RunnerData:
 
     def refresh_now(self):
         self.next_at = 0.0
+        self._forced = True
         self._kick.set()
+
+    def quiet_now(self, t=None):
+        if not self.quiet_hours:
+            return False
+        start, end = self.quiet_hours
+        h = dt.datetime.fromtimestamp(t if t is not None else time.time()).hour
+        return (start <= h < end) if start <= end else (h >= start or h < end)
+
+    def quiet_end(self, t=None):
+        """Epoch seconds of the next end of quiet hours."""
+        now = dt.datetime.fromtimestamp(t if t is not None else time.time())
+        end = now.replace(hour=self.quiet_hours[1], minute=0, second=0, microsecond=0)
+        return (end if end > now else end + dt.timedelta(days=1)).timestamp()
 
     def _setup(self):
         m = load_dashboard_module(self.script)
@@ -93,7 +112,11 @@ class RunnerData:
 
     def _gh_loop(self):
         while True:
+            if time.time() >= self.next_at and not self._forced and self._synced and self.quiet_now():
+                self.next_at = self.quiet_end()          # nobody's looking: skip the night's refreshes
             if time.time() >= self.next_at:
+                self._forced = False
+                self.fetching = True
                 try:
                     if self.st is None or self.api is None:
                         self._setup()
@@ -111,6 +134,7 @@ class RunnerData:
                     self._publish(v, st, dt.datetime.now(m.UTC))
                     # backfill quickly at first, then the configured cadence
                     self.next_at = time.time() + (20 if done < total else self.refresh_s)
+                    self._synced = done >= total
                     log.info("runner data: hosted MTD $%.2f, backfill %s/%s, api calls %s",
                              v.get("actions_net", 0), done, total, self.api.calls)
                 except Exception as e:
@@ -118,6 +142,8 @@ class RunnerData:
                     with self.lock:
                         self.error = str(e)[:80]
                     self.next_at = time.time() + 300
+                finally:
+                    self.fetching = False
             self._kick.wait(5)
             self._kick.clear()
 
@@ -192,7 +218,13 @@ class RunnerView:
         backfill = (v or {}).get("backfill", (0, 0))
         month = now.astimezone().strftime("%B %Y")
         wrong_month = (v or {}).get("month_label", month) != month
-        if (err or wrong_month or backfill[0] < backfill[1] or age is None or age > 2 * self.data.refresh_s or
+        if v and not err and not wrong_month and backfill[0] < backfill[1]:
+            # first fetch / widened history: say how far along, not just "stale" (numbers still partial)
+            return WARN, f"SYNC {100 * backfill[0] // backfill[1]}%"
+        expected = getattr(self.data, "fetching", False) or (
+            hasattr(self.data, "quiet_now") and self.data.quiet_now(now.timestamp()))
+        too_old = age is not None and age > 2 * self.data.refresh_s and not expected
+        if (err or wrong_month or backfill[0] < backfill[1] or age is None or too_old or
                 not v or "days7" not in v or "month_min" not in v or not units):
             return BAD, "STALE " + (_ago(age) if age is not None else "?")
         q = v.get("queue") or {}
@@ -293,7 +325,27 @@ class RunnerView:
         else:
             y, font_label = 200, self.f
         d.text((x, y), label, font=font_label, fill=INK2)
+        sched = self.schedule_text(v, now)
+        if sched:
+            sx = W - 8 - d.textlength(sched, font=self.f_s)
+            if y != 222 or sx > x + d.textlength(label, font=font_label) + 8:
+                d.text((sx, 222), sched, font=self.f_s, fill=MUTED)
         return np.asarray(img).copy()
+
+    def schedule_text(self, v, now):
+        """When the GitHub numbers next change: 'updating...', 'next 1h42', 'paused till 7:00'."""
+        data = self.data
+        if not v or not hasattr(data, "next_at"):
+            return None
+        done, total = v.get("backfill", (0, 0))
+        if data.fetching:
+            return "updating..."
+        if done < total:
+            return None                  # header already says SYNC n%
+        t = now.timestamp()
+        if data.quiet_hours and data.next_at > t and (data.quiet_now(t) or data.quiet_now(data.next_at)):
+            return f"paused till {data.quiet_hours[1]}:00"
+        return "next " + _ago(max(0.0, data.next_at - t))
 
 
 def _fit(d, text, font, width):
