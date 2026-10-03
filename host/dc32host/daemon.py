@@ -376,6 +376,15 @@ class Daemon:
                 self.zoom_user = "fit"
                 self.vp.set_zoom("fit")
                 self.say("Zoom: fit")
+        elif name == "back":               # badge B: undo one thing, so B always gets you unstuck
+            fg = self.be.foreground()
+            if self.view != "mirror":
+                self.set_view(self.prev_view if self.view == "help" and self.prev_view != "help" else "mirror")
+            elif self.vp.zoom != "fit" or self.zoom_user != "fit":
+                self.action("zoom_fit")
+            elif self.shown and fg and fg.handle == self.shown.handle:
+                self.be.send_key("esc")    # closes an overlay/popup in the shown app (e.g. one bumped open)
+                self.say("Esc")
         elif name.startswith("pan_"):
             d = {"pan_up": (0, -1), "pan_down": (0, 1), "pan_left": (-1, 0), "pan_right": (1, 0)}[name]
             self.vp.pan(*d)
