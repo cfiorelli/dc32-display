@@ -74,6 +74,19 @@ def draw_cursor(img: np.ndarray, x: int, y: int):
     sub[si] = (255, 255, 255)
 
 
+def draw_edge_marker(img: np.ndarray, x: int, y: int):
+    """Pointer is off the badge: an orange tab on the nearest edge, pointing at where it went."""
+    h, w = img.shape[:2]
+    cx, cy = min(max(x, 0), w - 1), min(max(y, 0), h - 1)
+    r = 6
+    if x < 0 or x >= w:                 # left/right edge: vertical tab
+        xs = slice(0, r) if x < 0 else slice(w - r, w)
+        img[max(0, cy - 3 * r):min(h, cy + 3 * r), xs] = (255, 140, 0)
+    if y < 0 or y >= h:                 # top/bottom edge: horizontal tab
+        ys = slice(0, r) if y < 0 else slice(h - r, h)
+        img[ys, max(0, cx - 3 * r):min(w, cx + 3 * r)] = (255, 140, 0)
+
+
 # --------------------------------------------------------------------------- text
 def _font(size=13):
     try:
@@ -120,6 +133,10 @@ def placeholder(lines: list[str]) -> np.ndarray:
 
 # --------------------------------------------------------------------------- viewport
 ZOOMS = {"fit": None, "2x": 2, "1x": 1}
+
+
+MOUSE_MARGIN = 0.18    # pointer pushes the 1:1/2:1 view when it gets this close (fraction) to an edge
+MOUSE_EASE = 0.5       # fraction of the remaining distance moved per frame
 
 
 class Viewport:
@@ -191,8 +208,10 @@ class Viewport:
         self._prev_key = key
         return best
 
-    def compose(self, src: np.ndarray, key, focus_pt=None, letterbox=(0, 0, 0), typing=False):
+    def compose(self, src: np.ndarray, key, focus_pt=None, letterbox=(0, 0, 0), typing=False, mouse=False):
         """src: RGB array of the source. focus_pt: preferred point (caret/mouse) in src coords.
+        mouse=True: focus_pt is the pointer; glide just far enough to keep it inside a margin
+        (a camera that gets pushed) instead of re-centring on it, which jumped and jittered.
         Returns (out_rgb, transform) where transform maps src (x, y) -> out (x, y)."""
         sh, sw = src.shape[:2]
         bbox = self._activity(src, key, typing)
@@ -220,6 +239,13 @@ class Viewport:
                 target = (bx1, by1 - 8)        # right end of the change: where the caret went
         if self.center is None:
             self.center = target or (sw / 2, sh - vh / 2)
+        elif target is not None and mouse and focus_pt is not None:
+            cx, cy = self.center
+            mx, my = 0.5 * vw - MOUSE_MARGIN * vw, 0.5 * vh - MOUSE_MARGIN * vh
+            want = (min(max(cx, target[0] - mx), target[0] + mx), min(max(cy, target[1] - my), target[1] + my))
+            # ease toward it; snap the last pixel so the frame settles and stops resending
+            nx, ny = cx + MOUSE_EASE * (want[0] - cx), cy + MOUSE_EASE * (want[1] - cy)
+            self.center = (want[0] if abs(want[0] - nx) < 1 else nx, want[1] if abs(want[1] - ny) < 1 else ny)
         elif target is not None:
             cx, cy = self.center
             # hysteresis: only move when the target leaves the inner 60% of the viewport
