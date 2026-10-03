@@ -2,7 +2,11 @@
 import datetime as dt
 from pathlib import Path
 import sys
+import tempfile
+import threading
 import unittest
+from types import SimpleNamespace
+from unittest.mock import patch
 
 import numpy as np
 
@@ -56,6 +60,44 @@ class Schedule(unittest.TestCase):
         loc = {'units': [{'unit': 'a.b.c.d', 'active': 'active'}]}
         self.assertEqual(view.status(v, loc, 'no access - token needs repo Actions: read', now, now),
                          (rv.BAD, 'NO ACCESS'))
+
+
+class StateFile(unittest.TestCase):
+    """A restart shows the last snapshot at once and keeps the refresh schedule (no refetch)."""
+
+    def make(self, path):
+        UTC = dt.timezone.utc
+        m = SimpleNamespace(UTC=UTC, compute=lambda st, now: {'backfill': (3, 3), 'actions_net': len(st.billing_items)})
+        st = SimpleNamespace(year=2026, month=10, lock=threading.RLock(), billing_items=None, billing_at=None,
+                             budget=None, runners=None, listed_at={})
+        d = rv.RunnerData('unused', refresh_s=7200)
+        d.mod, d.st = m, st
+        return d
+
+    def test_round_trip(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.object(rv, 'STATE_FILE', Path(tmp) / 's.json'):
+            now = dt.datetime.now(dt.timezone.utc)
+            a = self.make(tmp)
+            a.st.billing_items, a.st.budget, a.st.runners = [{'netAmount': 0}] * 4, {'budget_amount': 250}, [{'name': 'x'}]
+            a.st.billing_at = now
+            a.st.listed_at = {('PathReaderAI', '2026-10-01'): now}
+            a.updated = now - dt.timedelta(minutes=20)
+            a._save()
+            b = self.make(tmp)
+            b._restore()
+            v, _, err, updated = b.snapshot()
+            self.assertEqual(v['actions_net'], 4)
+            self.assertEqual(updated, a.updated)
+            self.assertEqual(b.st.listed_at, a.st.listed_at)
+            self.assertAlmostEqual(b.next_at, a.updated.timestamp() + 7200, delta=1)   # waits for the schedule
+            self.assertTrue(b._synced)
+
+    def test_other_month_is_ignored(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.object(rv, 'STATE_FILE', Path(tmp) / 's.json'):
+            a = self.make(tmp); a.st.billing_items = []; a.st.month = 9; a._save()
+            b = self.make(tmp); b._restore()
+            self.assertIsNone(b.snapshot()[0])
+            self.assertEqual(b.next_at, 0.0)
 
 
 class MouseCamera(unittest.TestCase):
