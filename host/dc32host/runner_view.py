@@ -132,11 +132,15 @@ class RunnerData:
                     v = m.compute(st, dt.datetime.now(m.UTC))
                     done, total = v.get("backfill", (0, 0))
                     self._publish(v, st, dt.datetime.now(m.UTC))
-                    # backfill quickly at first, then the configured cadence
-                    self.next_at = time.time() + (20 if done < total else self.refresh_s)
+                    # backfill quickly at first, then the configured cadence; a pass that hit an
+                    # error (timeout, no access) retries in 15 min rather than leaving STALE for 2 h
+                    err = self.error
+                    self.next_at = time.time() + (20 if done < total else min(900, self.refresh_s) if err
+                                                  else self.refresh_s)
                     self._synced = done >= total
-                    log.info("runner data: hosted MTD $%.2f, backfill %s/%s, api calls %s",
-                             v.get("actions_net", 0), done, total, self.api.calls)
+                    log.info("runner data: hosted MTD $%.2f, backfill %s/%s, api calls %s%s",
+                             v.get("actions_net", 0), done, total, self.api.calls,
+                             f", error: {err}" if err else "")
                 except Exception as e:
                     log.warning("runner data fetch failed: %s", e)
                     with self.lock:
@@ -221,6 +225,8 @@ class RunnerView:
         if v and not err and not wrong_month and backfill[0] < backfill[1]:
             # first fetch / widened history: say how far along, not just "stale" (numbers still partial)
             return WARN, f"SYNC {100 * backfill[0] // backfill[1]}%"
+        if err and err.startswith("no access"):
+            return BAD, "NO ACCESS"        # token can't read a configured repo/billing: fix the token, not wait
         expected = getattr(self.data, "fetching", False) or (
             hasattr(self.data, "quiet_now") and self.data.quiet_now(now.timestamp()))
         too_old = age is not None and age > 2 * self.data.refresh_s and not expected
