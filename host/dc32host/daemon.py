@@ -395,7 +395,11 @@ class Daemon:
             self.info_until = time.time() + 4
         elif name == "refresh":
             self.force_refresh()
-            self.say("Refreshed")
+            if self.view == "runner" and self.runner:
+                self.runner.data.refresh_now()   # B-hold on the runner view: fetch GitHub now
+                self.say("Updating runner data")
+            else:
+                self.say("Refreshed")
         elif name in ("brightness_up", "brightness_down"):
             self.brightness = max(0, min(31, self.brightness + (3 if name.endswith("up") else -3)))
             self.send(P.set_brightness(self.brightness))
@@ -432,7 +436,8 @@ class Daemon:
             from .runner_view import RunnerData, RunnerView
             rv = self.cfg.get("runner_view") or {}
             script = rv.get("script") or self._dashboard_script()
-            data = RunnerData(script, int(rv.get("refresh_s", 1800)))
+            data = RunnerData(script, int(rv.get("refresh_s", 7200)),
+                              quiet_hours=rv.get("quiet_hours", [22, 7]))
             data.start()
             self.runner = RunnerView(data)
         return self.runner
@@ -676,7 +681,7 @@ class Daemon:
         self.stats.cap_ms.append((time.time() - t_cap) * 1000)
 
         # focus point: caret (Win32), else recently-moved mouse inside the source
-        focus_pt = None
+        focus_pt, by_mouse = None, False
         cur = self.be.cursor()
         now = time.time()
         if cur:
@@ -688,15 +693,19 @@ class Daemon:
             car = self.be.caret(src_wi.handle) if hasattr(self.be, "caret") else None
             if car:
                 focus_pt = (car[0] - rect[0], car[1] - rect[1] + car[3])
-            elif cur and now - self.cursor_last[1] < 1.0 and not typing:   # typing beats the mouse
-                focus_pt = (cur[0] - rect[0], cur[1] - rect[1])
-        out, tf = self.vp.compose(src, key, focus_pt, tuple(self.cfg.get("letterbox_color", [0, 0, 0])), key_recent)
+            elif (cur and now - self.cursor_last[1] < 1.0 and not typing     # typing beats the mouse
+                  and self.cfg.get("mouse_moves_view", True)):
+                focus_pt, by_mouse = (cur[0] - rect[0], cur[1] - rect[1]), True
+        out, tf = self.vp.compose(src, key, focus_pt, tuple(self.cfg.get("letterbox_color", [0, 0, 0])), key_recent,
+                                  mouse=by_mouse)
 
         hide_after = float(self.cfg.get("cursor_only_when_moving_s", 3.0))
         if self.cfg.get("show_cursor", True) and cur and cur[2] and (hide_after <= 0 or now - self.cursor_last[1] < hide_after):
             cx, cy = C.map_point(tf, cur[0] - rect[0], cur[1] - rect[1])
             if 0 <= cx < C.OUT_W and 0 <= cy < C.OUT_H:
                 C.draw_cursor(out, cx, cy)
+            else:
+                C.draw_edge_marker(out, cx, cy)
         return t_cap, out, changed_src
 
     def apply_zoom(self, src_wi):

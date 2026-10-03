@@ -30,6 +30,7 @@ DEFAULTS = {
     "dim_brightness": 2,
     "lights_mode": "off",             # off | bright | wave | rainbow | rave | runner  (Ctrl+Alt+G cycles)
     "show_cursor": True,
+    "mouse_moves_view": True,         # zoomed in: pushing the pointer near an edge glides the view (False: keys/D-pad only)
     "cursor_only_when_moving_s": 3.0, # hide the cursor overlay this long after it stops (0 = always)
     "letterbox_color": [0, 0, 0],
     "long_press_ms": 600,
@@ -39,7 +40,9 @@ DEFAULTS = {
     "focus_alt_fallback": True,       # Windows: tap ALT if SetForegroundWindow is refused (foreground-lock workaround)
     "dashboard_favorite": "GitHub Runner Dashboard",
     "runner_view_for_dashboard": True, # show the badge-native runner view instead of the dashboard window
-    "runner_view": {"script": None, "refresh_s": 1800},   # script: defaults to the dashboard favorite's .py
+    # script: defaults to the dashboard favorite's .py. GitHub refresh every 2 h, none 22:00-07:00
+    # (B-hold on the runner view fetches now); quiet_hours: null = always refresh.
+    "runner_view": {"script": None, "refresh_s": 7200, "quiet_hours": [22, 7]},
     "typing_zoom": "1x",              # typing in fit mode zooms to this around the caret (None = off)
     "typing_zoom_hold_s": 0,          # 0: stay zoomed until B; >0: go back to fit after this many idle seconds
     "favorites": [
