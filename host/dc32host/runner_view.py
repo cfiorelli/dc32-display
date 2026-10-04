@@ -126,7 +126,7 @@ class RunnerData:
         st.billing_at = _iso(s.get("billing_at"))
         st.listed_at.update({tuple(k.split("|", 1)): _iso(t) for k, t in (s.get("listed_at") or {}).items()})
         updated = _iso(s.get("updated"))
-        v = m.compute(st, dt.datetime.now(m.UTC))
+        v = _compute(m, st)
         done, total = v.get("backfill", (0, 0))
         with self.lock:
             self.v, self.updated = v, updated
@@ -175,7 +175,7 @@ class RunnerData:
                     m.fetch_billing(st, self.api)
                     m.fetch_runners(st, self.api)
                     m.fetch_runs(st, self.api, now, max_job_calls=80)
-                    v = m.compute(st, dt.datetime.now(m.UTC))
+                    v = _compute(m, st)
                     done, total = v.get("backfill", (0, 0))
                     self._publish(v, st, dt.datetime.now(m.UTC))
                     # backfill quickly at first, then the configured cadence; a pass that hit an
@@ -230,6 +230,39 @@ class RunnerData:
             return self.v, dict(self.local), self.error, self.updated
 
 
+def saved_30d(m, st, now, rates):
+    """List-price cost of the self-hosted jobs that started in the last 30 days, i.e. what they
+    would have cost on GitHub-hosted runners. Rates come from the billing data (Linux $0.006/min)."""
+    since = now - dt.timedelta(days=30)
+    with st.lock:
+        jobs = dict(st.jobs)
+    seen, total = set(), 0.0
+    for key, entry in jobs.items():
+        repo = key.split(":", 1)[0]
+        for j in entry.get("jobs", []):
+            if (repo, j.get("id")) in seen:
+                continue
+            seen.add((repo, j.get("id")))
+            prov, typ = m.job_where(j)
+            if (prov != "self" or not m.job_executed(j) or j.get("status") != "completed"
+                    or j.get("conclusion") == "skipped"):
+                continue
+            ts = m.parse_ts(j.get("started_at"))
+            if ts and ts >= since:
+                total += m.billed_minutes(m.job_seconds(j, now) or 0) * rates.get(typ, m.FALLBACK_RATE.get(typ, 0.0))
+    return total
+
+
+def _compute(m, st):
+    now = dt.datetime.now(m.UTC)
+    v = m.compute(st, now)
+    try:
+        v["saved30"] = saved_30d(m, st, now, v.get("rates") or {})
+    except Exception as e:              # an older dashboard module without the helpers
+        log.debug("30-day savings unavailable: %s", e)
+    return v
+
+
 def _iso(s):
     return dt.datetime.fromisoformat(s) if s else None
 
@@ -256,7 +289,7 @@ class RunnerView:
         self.f_b = _ttf(14, bold=True)
         self.f_s = _ttf(12)
         self.f_sb = _ttf(12, bold=True)
-        self.f_money = _ttf(30, bold=True)
+        self.f_mid = _ttf(18, bold=True)
         self._offline_since = None
 
     def status(self, v, loc, err, updated, now):
@@ -366,27 +399,27 @@ class RunnerView:
         d.text((x1-d.textlength(right, font=self.f_s), 159), right, font=self.f_s, fill=INK2)
         d.line([0, 180, W, 180], fill=GRID)
 
-        # Footer: actual billed MTD net, never a list-price or savings estimate.
+        # Footer, two compact lines:
+        #   $12.34 saved  30 days, est.        what self-hosted minutes would have cost on GitHub
+        #   $0.00 of $250 budget    next 1h42  actual billed Actions spend this month
+        saved = (v or {}).get("saved30")
+        x = 8
+        if saved is not None:
+            amt = _money(saved)
+            d.text((x, 186), amt, font=self.f_mid, fill=SELF)
+            d.text((x + d.textlength(amt, font=self.f_mid) + 6, 191), "saved  30 days, est.", font=self.f_s, fill=INK2)
         amount = _money(v.get("actions_net", 0)) if v and same_month and v.get("billing_ok", True) else "$—"
         budget = (v or {}).get("budget")
-        label = f"of ${budget['amount']:,.0f} budget" if budget else "no budget set"
-        font = self.f_money
-        if d.textlength(amount, font=font) + d.textlength(label, font=self.f) > W - 30:
-            font = _ttf(24, bold=True)
-        d.text((8, 188), amount, font=font, fill=INK)
-        x = 8 + d.textlength(amount, font=font) + 10
-        # Long currency values retain the full budget text on the second footer line.
-        if x + d.textlength(label, font=self.f) > W - 8:
-            x, y = 8, 222
-            font_label = self.f_s
-        else:
-            y, font_label = 200, self.f
-        d.text((x, y), label, font=font_label, fill=INK2)
+        label = f"of ${budget['amount']:,.0f} budget" if budget else "spent, no budget set"
+        y = 212 if saved is not None else 196
+        d.text((x, y), amount, font=self.f_mid, fill=INK)
+        lx = x + d.textlength(amount, font=self.f_mid) + 6
+        d.text((lx, y + 4), label, font=self.f_s, fill=INK2)
         sched = self.schedule_text(v, now)
         if sched:
             sx = W - 8 - d.textlength(sched, font=self.f_s)
-            if y != 222 or sx > x + d.textlength(label, font=font_label) + 8:
-                d.text((sx, 222), sched, font=self.f_s, fill=MUTED)
+            if sx > lx + d.textlength(label, font=self.f_s) + 8:
+                d.text((sx, y + 4), sched, font=self.f_s, fill=MUTED)
         return np.asarray(img).copy()
 
     def schedule_text(self, v, now):
