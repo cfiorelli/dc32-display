@@ -116,7 +116,21 @@ class RunnerViewTest(unittest.TestCase):
         self.assertIn('Oct',texts)
         self.assertIn('$24.62',texts)
         self.assertIn('of $250 budget',texts)
+        # no savings line without a computed estimate
         self.assertFalse(any(term in ' '.join(texts).lower() for term in ('saved','upd','12h','list price')))
+
+    def test_footer_savings_line_above_spend(self):
+        data=Snapshot('idle');data.fixture['v']['saved30']=12.5
+        seen=[];draw_text=rv.ImageDraw.ImageDraw.text
+        def record(draw,xy,text,*a,**kw):
+            seen.append((text,xy[1]));return draw_text(draw,xy,text,*a,**kw)
+        with patch.object(rv.ImageDraw.ImageDraw,'text',record):
+            view(data).render(now=data.fixture['now'])
+        ys=dict(seen)
+        self.assertLess(ys['$12.50'],ys['$24.62'])
+        self.assertIn('saved  30 days, est.',ys)
+        self.assertIn('of $250 budget',ys)
+        self.assertTrue(all(y<=226 for _,y in seen))
 
     def test_errors_are_status_only_and_unknown_billing_is_not_zero(self):
         data=Snapshot('idle');data.fixture['error']='private diagnostic'
