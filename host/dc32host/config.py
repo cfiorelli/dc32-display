@@ -28,6 +28,9 @@ DEFAULTS = {
     "brightness": 22,                 # 0..31
     "dim_after_s": 600,               # dim the badge backlight after this long without PC/badge input (0 = never)
     "dim_brightness": 2,
+    "tap_sleep": True,                # double-tap the badge: sleep (screen off); any tap wakes it
+    "tap_threshold": 32,
+    "sd_writable": False,             # microSD as a USB drive: read-only unless enabled (ctl sd_rw / sd_ro)              # 1..127 x 16 mg; lower = lighter taps count (fw >= 0.3)
     "lights_mode": "off",             # off | bright | wave | rainbow | rave | runner  (Ctrl+Alt+G cycles)
     "show_cursor": True,
     "mouse_moves_view": True,         # zoomed in: pushing the pointer near an edge glides the view (False: keys/D-pad only)

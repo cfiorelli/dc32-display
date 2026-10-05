@@ -9,6 +9,8 @@
 #include "hardware/gpio.h"
 #include "hardware/watchdog.h"
 #include "leds.h"
+#include "accel.h"
+#include "sdcard.h"
 #include "tusb.h"
 
 #include "board_dc32.h"
@@ -46,7 +48,7 @@ static const char *s_note;
 static inline uint32_t now_ms(void) { return to_ms_since_boot(get_absolute_time()); }
 
 // ---------------------------------------------------------------- debug log (CDC)
-static void dbg(const char *fmt, ...)
+void dbg(const char *fmt, ...)
 {
     char buf[160];
     va_list ap;
@@ -189,6 +191,14 @@ static void on_msg(decoder_t *d, uint8_t type, const uint8_t *p, uint32_t len)
     case DC32_MSG_SET_BRIGHTNESS:
         if (len >= 1) lcd_set_brightness(p[0]);
         break;
+    case DC32_MSG_SET_SD_WRITE: {
+        extern bool msc_writable;
+        if (len >= 1) msc_writable = p[0] != 0;
+        break;
+    }
+    case DC32_MSG_SET_TAP:
+        if (len >= 1) accel_set_tap_threshold(p[0]);
+        break;
     case DC32_MSG_SET_TIMING:
         if (len >= 6) buttons_set_timing((uint16_t)(p[0] | (p[1] << 8)), (uint16_t)(p[2] | (p[3] << 8)), (uint16_t)(p[4] | (p[5] << 8)));
         break;
@@ -283,6 +293,10 @@ int main(void)
 
     tud_init(BOARD_TUD_RHPORT);
     watchdog_enable(3000, true);
+    // after USB + watchdog: a wedged I2C bus or missing accelerometer must never keep the badge off USB
+    bool have_accel = accel_init();
+    dbg("accelerometer %s", have_accel ? "ok" : "not found");
+    uint32_t last_tap_poll = 0;
 
     static uint8_t rx[RX_CHUNK];
     uint32_t last_ui = 0, last_mount_ms = now_ms();
@@ -324,6 +338,13 @@ int main(void)
                 if (s_screen == SCR_DISCONNECTED) enter_screen(SCR_STREAM);
             }
             tud_task();
+        }
+
+        // taps (LIS3DH click engine latches them; 50 Hz polling is plenty)
+        if (have_accel && now - last_tap_poll >= 20) {
+            last_tap_poll = now;
+            uint8_t tap = accel_poll_tap();
+            if (tap && s_host_alive) send_msg(DC32_MSG_TAP, &tap, 1);
         }
 
         // host liveness

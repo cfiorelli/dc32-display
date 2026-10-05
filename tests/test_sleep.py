@@ -51,6 +51,19 @@ class Sleep(unittest.TestCase):
         d.on_button(SimpleNamespace(button='a', event='short', held=(), fn_held=False))
         self.assertEqual(d.actions, [])         # the waking press did not also zoom
 
+    def test_taps(self):
+        d = stub([999.0])
+        d.on_tap(P.TapEvent(1))
+        self.assertFalse(d.sleeping)            # single tap while awake: nothing (desk bumps)
+        d.on_tap(P.TapEvent(2))
+        self.assertTrue(d.sleeping)
+        d.on_tap(P.TapEvent(1))
+        self.assertTrue(d.sleeping)             # the tail of that double-tap doesn't wake it
+        with patch.object(D.time, 'time', return_value=d.sleep_t + 5):
+            d.on_tap(P.TapEvent(1))
+        self.assertFalse(d.sleeping)
+        self.assertEqual(P.parse(P.TAP, bytes([2])), P.TapEvent(2))
+
     def test_manual_brightness_never_reaches_off(self):
         d = stub([0.0])
         d.brightness, d.say = 2, lambda *a, **k: None

@@ -8,8 +8,8 @@ project(dc32_display C CXX ASM)
 set(CMAKE_C_STANDARD 11)
 
 set(DC32_FW_MAJOR 0)
-set(DC32_FW_MINOR 2)
-set(DC32_FW_PATCH 1)
+set(DC32_FW_MINOR 3)
+set(DC32_FW_PATCH 0)
 set(DC32_FW_VERSION "${DC32_FW_MAJOR}.${DC32_FW_MINOR}.${DC32_FW_PATCH}")
 math(EXPR DC32_BCD_DEVICE "${DC32_FW_MAJOR} * 256 + ${DC32_FW_MINOR} * 16 + ${DC32_FW_PATCH}")
 execute_process(COMMAND git rev-parse --short=7 HEAD WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
@@ -22,7 +22,8 @@ configure_file(src/version.h.in ${CMAKE_CURRENT_BINARY_DIR}/version.h @ONLY)
 pico_sdk_init()
 
 add_executable(dc32_display
-  src/main.c src/lcd.c src/buttons.c src/decoder.c src/ui.c src/usb_descriptors.c src/leds.c)
+  src/main.c src/lcd.c src/buttons.c src/decoder.c src/ui.c src/usb_descriptors.c src/leds.c
+  src/sdcard.c src/msc_disk.c src/accel.c)
 pico_generate_pio_header(dc32_display ${CMAKE_CURRENT_SOURCE_DIR}/src/lcd_spi.pio)
 pico_generate_pio_header(dc32_display ${CMAKE_CURRENT_SOURCE_DIR}/src/ws2812.pio)
 target_include_directories(dc32_display PRIVATE src ../protocol ${CMAKE_CURRENT_BINARY_DIR})
@@ -32,7 +33,7 @@ target_compile_definitions(dc32_display PRIVATE
   BOARD_TUD_RHPORT=0)
 target_link_libraries(dc32_display PRIVATE
   pico_stdlib pico_unique_id pico_bootrom tinyusb_device
-  hardware_pio hardware_dma hardware_pwm hardware_watchdog hardware_clocks)
+  hardware_pio hardware_dma hardware_pwm hardware_watchdog hardware_clocks hardware_spi hardware_i2c)
 pico_set_program_name(dc32_display "dc32-display")
 pico_set_program_version(dc32_display "${DC32_FW_VERSION}")
 pico_enable_stdio_usb(dc32_display 0)
