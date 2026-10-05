@@ -1,6 +1,6 @@
-built: 2026-10-05T02:35:01Z
-git: 3b4cd88f2d31f4757f833d0944407f8cea9ff5fa
+built: 2026-10-05T22:36:18Z
+git: 14a440aa2625b448a6bace8099eb0cbe9e82474d
 pico-sdk: 2.2.0
 toolchain: arm-none-eabi-gcc (15:10.3-2021.07-4) 10.3.1 20210621 (release)
    text	   data	    bss	    dec	    hex	filename
-  41576	      0	 176832	 218408	  35528	firmware/build/dc32_display.elf
+  49888	      0	 181008	 230896	  385f0	firmware/build/dc32_display.elf

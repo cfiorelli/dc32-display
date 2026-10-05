@@ -24,3 +24,14 @@
 
 #define LCD_HW_W        240     // native panel is portrait
 #define LCD_HW_H        320
+
+// microSD, SPI1 (stock: sdHwRP2350.c)
+#define PIN_SD_MISO     12
+#define PIN_SD_CS       13
+#define PIN_SD_SCK      14
+#define PIN_SD_MOSI     15
+
+// LIS3DH accelerometer on I2C1, address 0x18 (stock: badgePower.c)
+#define PIN_I2C_SDA     2
+#define PIN_I2C_SCL     3
+#define ACCEL_I2C_ADDR  0x18

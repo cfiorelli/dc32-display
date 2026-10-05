@@ -44,6 +44,7 @@ so the hunt is exact.
 | 0x21 | MENU_CLOSE | – |
 | 0x22 | SET_BRIGHTNESS | u8 0..31 (0 = backlight off, fw >= 0.2.1) |
 | 0x24 | SET_LEDS | u8 n, then n × (r, g, b), n ≤ 9 (fw ≥ 0.2). Front LEDs 0,2,4,5,6; rear 1,3,7,8. The badge caps total brightness for USB power and turns the LEDs off when the host goes quiet. |
+| 0x25 | SET_TAP | u8 threshold 0..127 × 16 mg (0 = taps off), fw ≥ 0.3 |
 | 0x23 | SET_TIMING | u16 long_press_ms, u16 repeat_delay_ms, u16 repeat_ms, u16 reserved |
 | 0x7E | REBOOT | u8 kind (0 app, 1 BOOTSEL) + `"BOOT"` |
 
@@ -65,6 +66,7 @@ badge maps `(x, y) → fb[x·240 + 239 − y]` (verified against the stock UI's 
 | 0x82 | ACK | u32 frame_id, u32 rx_bytes_total, u32 t_ms, u32 decode_us since last ACK |
 | 0x83 | MENU_RESULT | u8 kind, u8 action (0 cancel, 1 select, 2 pin), u16 rsv, u32 entry_id |
 | 0x84 | PONG | u32 token |
+| 0x85 | TAP | u8 kind: 1 = single, 2 = double (LIS3DH click engine), fw ≥ 0.3 |
 | 0x8F | ERROR | u8 code (1 magic, 2 type, 3 rect, 4 length, 5 RLE overrun), u8 rsv[3], u32 detail |
 
 Buttons: 0 up, 1 down, 2 left, 3 right, 4 A, 5 B, 6 START, 7 SELECT, 8 FN (centre). Debounce is
@@ -85,3 +87,9 @@ is for the D-pad only.
 The host keeps at most `max_frames_in_flight` (default 2) frames un-ACKed. This bounds queueing
 latency to about one frame. If an ACK is overdue by more than 1.5 s, the host sends SYNC and a
 full refresh.
+
+## USB mass storage (fw ≥ 0.3)
+
+Interface 3 is a standard USB mass-storage device: the microSD card, read/write, 512-byte blocks.
+The host OS owns the filesystem; the display stream on interface 0 is unaffected (large copies
+pause it briefly). No card reports "medium not present" and is retried every 2 s.
