@@ -18,9 +18,12 @@ HDR = struct.Struct("<BBHI")
 SYNC, HELLO, PING = 0x00, 0x01, 0x02
 RECT_RAW, RECT_RLE, FILL, COPY, FRAME_END = 0x10, 0x11, 0x12, 0x13, 0x14
 MENU_LIST, MENU_CLOSE, SET_BRIGHTNESS, SET_TIMING, SET_LEDS = 0x20, 0x21, 0x22, 0x23, 0x24
+SET_TAP = 0x25
+SET_SD_WRITE = 0x26
 REBOOT = 0x7E
 # badge -> host
 INFO, BUTTON, ACK, MENU_RESULT, PONG, ERROR = 0x80, 0x81, 0x82, 0x83, 0x84, 0x8F
+TAP = 0x85
 
 BUTTONS = ["up", "down", "left", "right", "a", "b", "start", "select", "fn"]
 EVENTS = {1: "down", 2: "up", 3: "short", 4: "long", 5: "repeat"}
@@ -101,6 +104,16 @@ def set_timing(long_ms: int, repeat_delay_ms: int, repeat_ms: int) -> bytes:
     return msg(SET_TIMING, struct.pack("<HHHH", long_ms, repeat_delay_ms, repeat_ms, 0))
 
 
+def set_tap(threshold: int) -> bytes:
+    """Tap sensitivity, 1..127 x 16 mg (lower = more sensitive); 0 turns taps off. fw >= 0.3."""
+    return msg(SET_TAP, bytes([max(0, min(127, int(threshold)))]))
+
+
+def set_sd_write(enable: bool) -> bytes:
+    """microSD over USB: writable (True) or read-only. Takes effect on the PC's next mount. fw >= 0.3."""
+    return msg(SET_SD_WRITE, bytes([1 if enable else 0]))
+
+
 def reboot(bootsel: bool) -> bytes:
     return msg(REBOOT, bytes([1 if bootsel else 0]) + b"BOOT")
 
@@ -144,6 +157,11 @@ class MenuResult:
 
 
 @dataclass
+class TapEvent:
+    count: int          # 1 = single tap, 2 = double tap
+
+
+@dataclass
 class DeviceError:
     code: int
     detail: int
@@ -163,6 +181,8 @@ def parse(mtype: int, p: bytes):
     if mtype == MENU_RESULT and len(p) >= 8:
         k, a, _, i = struct.unpack_from("<BBHI", p)
         return MenuResult(k, a, i)
+    if mtype == TAP and len(p) >= 1:
+        return TapEvent(p[0])
     if mtype == PONG and len(p) >= 4:
         return ("pong", struct.unpack_from("<I", p)[0])
     if mtype == ERROR and len(p) >= 8:

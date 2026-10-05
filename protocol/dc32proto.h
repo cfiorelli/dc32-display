@@ -32,6 +32,8 @@
 #define DC32_MSG_MENU_CLOSE     0x21    // (empty)
 #define DC32_MSG_SET_BRIGHTNESS 0x22    // u8 0..31 (0 = backlight off)
 #define DC32_MSG_SET_LEDS       0x24    // u8 n + n * (r,g,b); n <= 9. Front LEDs 0,2,4,5,6; rear 1,3,7,8
+#define DC32_MSG_SET_SD_WRITE   0x26    // u8 1 = microSD writable over USB, 0 = read-only (default), fw >= 0.3
+#define DC32_MSG_SET_TAP        0x25    // u8 threshold 0..127 (16 mg/LSB, 0 = taps off), fw >= 0.3
 #define DC32_MSG_SET_TIMING     0x23    // u16 long_ms, u16 repeat_delay_ms, u16 repeat_ms, u16 idle_timeout_ms
 #define DC32_MSG_REBOOT         0x7E    // u8 kind(0=app,1=BOOTSEL) + "BOOT"
 
@@ -41,6 +43,7 @@
 #define DC32_MSG_ACK            0x82    // u32 frame_id, u32 rx_bytes, u32 t_ms, u32 decode_us
 #define DC32_MSG_MENU_RESULT    0x83    // u8 kind, u8 action, u16 rsv, u32 entry_id
 #define DC32_MSG_PONG           0x84    // u32 token
+#define DC32_MSG_TAP            0x85    // u8 kind (1 = single, 2 = double), fw >= 0.3
 #define DC32_MSG_ERROR          0x8F    // u8 code, u8 rsv[3], u32 detail
 
 // button ids
