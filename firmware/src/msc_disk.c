@@ -27,7 +27,9 @@ void tud_msc_inquiry_cb(uint8_t lun, uint8_t vendor_id[8], uint8_t product_id[16
 {
     (void)lun;
     memcpy(vendor_id, "DEFCON32", 8);
-    memcpy(product_id, "Badge microSD   ", 16);
+    // last two chars: accelerometer status for diagnostics (A+ found, A- not found)
+    extern bool accel_present;
+    memcpy(product_id, accel_present ? "Badge microSD A+" : "Badge microSD A-", 16);
     // revision = card diagnostics, visible in /sys/block/sdX/device/rev:
     //   [0] B = block-addressed (SDHC/XC), b = byte-addressed (SDSC), - = no card; [1] CSD version 1/2
     bool ok = card_ok();
@@ -93,8 +95,20 @@ int32_t tud_msc_write10_cb(uint8_t lun, uint32_t lba, uint32_t offset, uint8_t *
 
 int32_t tud_msc_scsi_cb(uint8_t lun, uint8_t const scsi_cmd[16], void *buffer, uint16_t bufsize)
 {
-    (void)buffer; (void)bufsize;
     switch (scsi_cmd[0]) {
+    case 0xC0: {                                   // vendor: accelerometer diagnostics (tools)
+        extern int accel_diag(uint8_t *out);
+        uint8_t d[32];
+        int n = accel_diag(d);
+        if (n > bufsize) n = bufsize;
+        memcpy(buffer, d, (size_t)n);
+        return n;
+    }
+    case 0xC1: {                                   // vendor: simulate a tap via accelerometer self-test
+        extern void accel_self_test_pulse(void);
+        accel_self_test_pulse();
+        return 0;
+    }
     case 0x35:                                     // SYNCHRONIZE CACHE: writes are already on the card
         return 0;
     default:
