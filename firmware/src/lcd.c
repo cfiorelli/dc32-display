@@ -69,7 +69,9 @@ static void dma_irq(void)
 void lcd_set_brightness(uint8_t bri)
 {
     if (bri > 31) bri = 31;
-    pwm_set_chan_level(pwm_gpio_to_slice_num(PIN_LCD_BL), pwm_gpio_to_channel(PIN_LCD_BL), (uint16_t)(bri * bri + 61));
+    // 0 = backlight fully off (host "sleep"); 1..31 keep the old curve, whose floor is ~6%
+    pwm_set_chan_level(pwm_gpio_to_slice_num(PIN_LCD_BL), pwm_gpio_to_channel(PIN_LCD_BL),
+                       bri ? (uint16_t)(bri * bri + 61) : 0);
 }
 
 void lcd_init(void)

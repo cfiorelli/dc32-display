@@ -19,6 +19,15 @@ from .device import Badge, Disconnected
 log = logging.getLogger("dc32.daemon")
 
 MODES = ["follow", "pinned", "desktop"]
+def E_black_frame(d):
+    """Full black frame (sleep): encoded like any other frame so the badge clears to it."""
+    import numpy as np
+    cur = E.rgb_to_565(np.zeros((C.OUT_H, C.OUT_W, 3), np.uint8))
+    d.frame_id = (d.frame_id + 1) & 0xFFFFFFFF
+    d.prev = cur
+    return b"".join(E.encode_frame(cur, None, d.stats.kinds)) + P.frame_end(d.frame_id)
+
+
 RESYNC_GAP_S = 2.5    # firmware HOST_TIMEOUT_MS is 3000: past this the badge may have blanked
 ZOOM_CYCLE = ["fit", "2x", "1x"]
 FAV_ID_BASE = 0x80000000
@@ -113,6 +122,8 @@ class Daemon:
         self._leds_t = 0.0
         self.last_badge_input = time.time()
         self.dimmed = False
+        self.sleeping = False
+        self.sleep_t = 0.0
         self._dim_check = 0.0
 
     # ================================================================ local control (keyboard shortcuts)
@@ -143,6 +154,33 @@ class Daemon:
                     self.ctl_q.put(data)
 
         threading.Thread(target=loop, daemon=True, name="ctl").start()
+
+    def sleep(self):
+        """Backlight off, LEDs off, no capture; ping only. Wakes on PC keyboard/mouse or any badge button."""
+        if self.sleeping:
+            return
+        self.sleeping, self.sleep_t = True, time.time()
+        self.send(P.set_leds([(0, 0, 0)] * 9) + P.set_brightness(0))
+        self._leds_last = None
+        self.force_refresh()             # next frame is the black sleep frame
+        log.info("sleep")
+
+    def wake(self, why):
+        if not self.sleeping:
+            return
+        self.sleeping = False
+        self.dimmed = False
+        self.last_badge_input = time.time()
+        self.send(P.set_brightness(self.brightness))
+        self._leds_last = None
+        self.force_refresh()
+        log.info("wake (%s) after %d min", why, (time.time() - self.sleep_t) // 60)
+
+    def check_wake(self):
+        """PC input after the sleep command (1 s grace: the shortcut's own keys) wakes the badge."""
+        idle_ms = self.be._idle_ms() if hasattr(self.be, "_idle_ms") else None
+        if idle_ms is not None and time.time() - idle_ms / 1000.0 > self.sleep_t + 1.0:
+            self.wake("PC input")
 
     def idle_dim(self):
         """LCD backlight saver: dim after `dim_after_s` without PC or badge input, wake on either.
@@ -402,8 +440,19 @@ class Daemon:
                 self.say("Updating runner data")
             else:
                 self.say("Refreshed")
+        elif name in ("sleep", "toggle_sleep"):
+            if self.sleeping and name == "toggle_sleep":
+                self.wake("command")
+            else:
+                self.sleep()
+        elif name == "wake":
+            self.wake("command")
+        elif name == "bootsel":            # for tools/badgetool.py flash while the daemon owns USB
+            log.info("rebooting the badge into BOOTSEL")
+            self.send(P.reboot(bootsel=True))
         elif name in ("brightness_up", "brightness_down"):
-            self.brightness = max(0, min(31, self.brightness + (3 if name.endswith("up") else -3)))
+            # 0 is "off" (sleep) on fw >= 0.2.1, so manual brightness stops at 1
+            self.brightness = max(1, min(31, self.brightness + (3 if name.endswith("up") else -3)))
             self.send(P.set_brightness(self.brightness))
             self.say(f"Brightness {self.brightness}/31")
         else:
@@ -480,6 +529,7 @@ class Daemon:
             ("Resume display" if self.view == "paused" else "Pause display", "toggle_pause", self.view == "paused"),
             (f"Lights: {self.lights.mode} (Ctrl+Alt+G)", "lights_next", self.lights.mode != "off"),
             ("Shortcuts (Ctrl+Alt+H)", "toggle_help", self.view == "help"),
+            ("Sleep: screen off (Ctrl+Alt+S)", "sleep", False),
             ("Status info", "info", False),
         ]
         entries, self.menu_table = [], {}
@@ -548,7 +598,10 @@ class Daemon:
     # ================================================================ events
     def on_button(self, ev: P.ButtonEvent):
         self.last_badge_input = time.time()
-        if self.dimmed:                      # a press on a dimmed badge only wakes the backlight
+        if self.sleeping:                    # any press wakes; it does nothing else
+            self.wake("badge button")
+            self._swallow = ev.button
+        elif self.dimmed:                    # a press on a dimmed badge only wakes the backlight
             self.dimmed = False
             self.send(P.set_brightness(self.brightness))
             self._swallow = ev.button
@@ -763,9 +816,19 @@ class Daemon:
 
     def tick(self):
         self.run_control()
+        now = time.time()
+        if self.sleeping:
+            self.check_wake()
+        if self.sleeping:
+            if self.prev is None:        # one black frame, then only keep-alives
+                self.send(E_black_frame(self))
+            elif now - self.last_ping > 1.0:
+                self.send(P.ping(int(now)))
+                self.last_ping = now
+            self.drain_events(0.1)
+            return
         self.idle_dim()
         self.update_leds()
-        now = time.time()
         if self.menu_open_until and now < self.menu_open_until:
             if now - self.last_ping > 1.0:
                 self.send(P.ping(int(now)))
