@@ -19,6 +19,7 @@ from .device import Badge, Disconnected
 log = logging.getLogger("dc32.daemon")
 
 MODES = ["follow", "pinned", "desktop"]
+RESYNC_GAP_S = 2.5    # firmware HOST_TIMEOUT_MS is 3000: past this the badge may have blanked
 ZOOM_CYCLE = ["fit", "2x", "1x"]
 FAV_ID_BASE = 0x80000000
 HOME_ID_BASE = 0x40000000
@@ -215,6 +216,7 @@ class Daemon:
 
     def send(self, data: bytes):
         self.badge.write(data)
+        self._last_tx = time.time()
 
     def force_refresh(self):
         self.prev = None
@@ -795,7 +797,15 @@ class Daemon:
                 self.drain_events(0.01)
                 return
 
+        # Silent >3 s (a stalled tick) and the badge dropped to its 'disconnected' screen; on the next
+        # byte it clears to black and expects a redraw, so a diff against self.prev would leave holes.
+        if time.time() - getattr(self, "_last_tx", time.time()) > RESYNC_GAP_S:
+            log.info("host was silent %.1f s: full redraw", time.time() - self._last_tx)
+            self.inflight.clear()
+            self.force_refresh()
+        t_b = time.time()
         t_cap, rgb, changed_src = self.build_frame()
+        self._t_build = time.time() - t_b
         rgb = self.overlays(rgb)
         t_enc = time.time()
         cur = E.rgb_to_565(rgb)
@@ -806,7 +816,9 @@ class Daemon:
             self.frame_id = (self.frame_id + 1) & 0xFFFFFFFF
             blob = b"".join(msgs) + P.frame_end(self.frame_id)
             self.stats.enc_ms.append((time.time() - t_enc) * 1000)
+            t_s = time.time()
             self.send(blob)
+            self._t_send = time.time() - t_s
             self.inflight[self.frame_id] = (t_cap, time.time())
             if self.on_frame_sent:
                 self.on_frame_sent(self.frame_id, rgb, t_cap)
@@ -862,10 +874,12 @@ class Daemon:
                     continue
             try:
                 t0 = time.time()
+                self._t_build = self._t_send = 0.0
                 self.tick()
                 dt = time.time() - t0
                 if dt > 1.5:      # the badge shows "disconnected" after 3 s of silence; find what stalls
-                    log.warning("slow tick: %.1f s (view=%s, shown=%s)", dt, self.view,
+                    log.warning("slow tick: %.1f s (build %.1f s, send %.1f s, view=%s, shown=%s)", dt,
+                                self._t_build, self._t_send, self.view,
                                 self.shown.title[:40] if self.shown else None)
             except Disconnected as e:
                 log.warning("badge disconnected: %s", e)
