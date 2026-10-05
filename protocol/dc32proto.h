@@ -30,7 +30,7 @@
 #define DC32_MSG_FRAME_END      0x14    // u32 frame_id -> badge replies ACK
 #define DC32_MSG_MENU_LIST      0x20    // see PROTOCOL.md
 #define DC32_MSG_MENU_CLOSE     0x21    // (empty)
-#define DC32_MSG_SET_BRIGHTNESS 0x22    // u8 0..31
+#define DC32_MSG_SET_BRIGHTNESS 0x22    // u8 0..31 (0 = backlight off)
 #define DC32_MSG_SET_LEDS       0x24    // u8 n + n * (r,g,b); n <= 9. Front LEDs 0,2,4,5,6; rear 1,3,7,8
 #define DC32_MSG_SET_TIMING     0x23    // u16 long_ms, u16 repeat_delay_ms, u16 repeat_ms, u16 idle_timeout_ms
 #define DC32_MSG_REBOOT         0x7E    // u8 kind(0=app,1=BOOTSEL) + "BOOT"
