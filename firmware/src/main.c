@@ -281,6 +281,9 @@ int main(void)
     set_sys_clock_khz(125000, true);
 
     bool wd_reboot = watchdog_enable_caused_reboot();   // a real timeout, not picotool/BOOTSEL reboots
+    // Watchdog from the first line of init: an (intermittent) hang before USB used to leave the badge
+    // dark and off USB until a power cycle; now it resets and retries. Tightened to 3 s once running.
+    watchdog_enable(8000, true);
     lcd_init();
     leds_init();
     ui_init(lcd_fb());

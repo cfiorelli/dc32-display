@@ -17,6 +17,7 @@ def stub(idle_s):
     d.send = d.sent.append
     d.be = SimpleNamespace(_idle_ms=lambda: idle_s[0] * 1000)
     d.sleeping, d.sleep_t, d.dimmed, d.brightness = False, 0.0, False, 22
+    d._tap_last = 0.0
     d.prev, d._leds_last, d.last_badge_input = object(), None, 0.0
     d.force_refresh = lambda: setattr(d, 'prev', None)
     d.cfg = {'buttons': {'a.short': 'zoom_cycle'}}
@@ -51,17 +52,22 @@ class Sleep(unittest.TestCase):
         d.on_button(SimpleNamespace(button='a', event='short', held=(), fn_held=False))
         self.assertEqual(d.actions, [])         # the waking press did not also zoom
 
-    def test_taps(self):
+    def test_tap_toggles_sleep_once_per_physical_tap(self):
+        # 35 tap events recorded from real finger taps (2026-10-05): each tap rings as a burst
+        rec = [2443.552, 2443.555, 2443.595, 2602.953, 2604.154] + [2604.154] * 6 + [
+            2607.193, 2607.213, 2607.233, 2607.260, 2607.313, 2607.350, 2607.353, 2607.453, 2607.473,
+            2607.493, 2607.517, 2607.533, 2607.613, 2607.653, 2607.713, 2629.994, 2630.017, 2630.085,
+            2630.094, 2630.152, 2630.154, 2630.179, 2646.254, 2646.306]
         d = stub([999.0])
-        d.on_tap(P.TapEvent(1))
-        self.assertFalse(d.sleeping)            # single tap while awake: nothing (desk bumps)
-        d.on_tap(P.TapEvent(2))
-        self.assertTrue(d.sleeping)
-        d.on_tap(P.TapEvent(1))
-        self.assertTrue(d.sleeping)             # the tail of that double-tap doesn't wake it
-        with patch.object(D.time, 'time', return_value=d.sleep_t + 5):
-            d.on_tap(P.TapEvent(1))
-        self.assertFalse(d.sleeping)
+        d.wake = lambda why: setattr(d, 'sleeping', False)
+        states = []
+        for t in rec:
+            with patch.object(D.time, 'time', return_value=t):
+                was = d.sleeping
+                d.on_tap(P.TapEvent(1))
+                if d.sleeping != was:
+                    states.append(d.sleeping)
+        self.assertEqual(states, [True, False, True, False, True, False])   # 6 taps, 6 toggles
         self.assertEqual(P.parse(P.TAP, bytes([2])), P.TapEvent(2))
 
     def test_manual_brightness_never_reaches_off(self):
