@@ -10,7 +10,7 @@
 
 #define SD_SPI      spi1
 #define SLOW_HZ     400000
-#define FAST_HZ     12500000    // conservative: long traces to the slot
+#define FAST_HZ     1000000     // stock firmware: the bundled card is not reliable above 1 MHz
 
 static bool s_ready, s_block_addr;      // block_addr: SDHC/SDXC take block numbers, SDSC bytes
 static uint32_t s_blocks;
@@ -104,8 +104,23 @@ bool sd_init(void)
     cs(false);
     for (int i = 0; i < 10; i++) xfer(0xFF);          // >= 74 clocks with CS high
 
+    // A card left mid-transfer can be off by a bit: like the stock driver, inject single extra SCK
+    // pulses until CMD0 answers (this recovers what otherwise needed a power cycle).
+    bool idle = false;
+    for (int extra = 0; extra < 9 && !idle; extra++) {
+        if (extra) {
+            gpio_set_function(PIN_SD_SCK, GPIO_FUNC_SIO);
+            gpio_set_dir(PIN_SD_SCK, GPIO_OUT);
+            gpio_put(PIN_SD_SCK, 1); busy_wait_us(50);
+            gpio_put(PIN_SD_SCK, 0); busy_wait_us(50);
+            gpio_set_function(PIN_SD_SCK, GPIO_FUNC_SPI);
+            for (int i = 0; i < 10; i++) xfer(0xFF);
+        }
+        idle = cmd(0, 0) == 1;
+        watchdog_update();
+    }
     bool ok = false;
-    if (cmd(0, 0) == 1) {                              // idle
+    if (idle) {                                        // idle
         uint32_t hcs = 0;
         if (cmd(8, 0x1AA) == 1) {                      // SD v2
             uint8_t r7[4];

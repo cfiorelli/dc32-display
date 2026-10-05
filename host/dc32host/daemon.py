@@ -28,6 +28,7 @@ def E_black_frame(d):
     return b"".join(E.encode_frame(cur, None, d.stats.kinds)) + P.frame_end(d.frame_id)
 
 
+TAP_QUIET_S = 0.8     # gap that separates two physical taps (each rings as a burst of events)
 RESYNC_GAP_S = 2.5    # firmware HOST_TIMEOUT_MS is 3000: past this the badge may have blanked
 ZOOM_CYCLE = ["fit", "2x", "1x"]
 FAV_ID_BASE = 0x80000000
@@ -124,6 +125,7 @@ class Daemon:
         self.dimmed = False
         self.sleeping = False
         self.sleep_t = 0.0
+        self._tap_last = 0.0
         self._dim_check = 0.0
 
     # ================================================================ local control (keyboard shortcuts)
@@ -177,14 +179,18 @@ class Daemon:
         log.info("wake (%s) after %d min", why, (time.time() - self.sleep_t) // 60)
 
     def on_tap(self, ev):
-        """Accelerometer taps: double-tap sleeps; while asleep any tap wakes. A single tap while awake
-        does nothing, so a bump on the desk can't blank the screen."""
+        """A tap toggles sleep. One physical tap rings for up to ~0.5 s and arrives as a burst of tap
+        events, so a new tap only counts after TAP_QUIET_S without any (the chip's double-tap flag
+        can't be trusted for the same reason)."""
+        now = time.time()
+        quiet = now - self._tap_last
+        self._tap_last = now
         log.info("tap x%d", ev.count)
-        if not self.cfg.get("tap_sleep", True) or time.time() - self.sleep_t < 1.5 and self.sleeping:
-            return                       # the double-tap that just put it to sleep
+        if not self.cfg.get("tap_sleep", True) or quiet < TAP_QUIET_S:
+            return
         if self.sleeping:
             self.wake("tap")
-        elif ev.count >= 2:
+        else:
             self.sleep()
 
     def check_wake(self):
@@ -934,7 +940,7 @@ class Daemon:
         self.last_badge_input = time.time()
         self._leds_last = None
         self.send(P.set_brightness(self.brightness) + P.set_timing(int(self.cfg.get("long_press_ms", 600)), 400, 90)
-                  + P.set_tap(int(self.cfg.get("tap_threshold", 32)) if self.cfg.get("tap_sleep", True) else 0)
+                  + P.set_tap(int(self.cfg.get("tap_threshold", 12)) if self.cfg.get("tap_sleep", True) else 0)
                   + P.set_sd_write(bool(self.cfg.get("sd_writable", False))))
         self.say(f"DC32 Display host {__version__}", f"fw {self.badge.info.fw}")
 
