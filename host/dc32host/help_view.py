@@ -7,8 +7,8 @@ from PIL import Image, ImageDraw
 from . import capture as C
 from .runner_view import BG, INK, INK2, MUTED, GRID, HOSTED, _ttf
 
-KEYS = [("B", "runner view"), ("H", "this help"), ("Z", "zoom"), ("X", "fit"),
-        ("I J K L", "move view"), ("G", "lights")]
+KEYS = [("B", "runner view"), ("H", "this help"), ("Z / X", "zoom / fit"), ("I J K L", "move view"),
+        ("G", "lights"), ("S", "sleep")]
 BADGE = [("FN", "menu"), ("A", "zoom"), ("A hold", "runner view"), ("B", "back / Esc"),
          ("SELECT", "prev app"), ("START", "app list"), ("D-pad", "move view"), ("FN+B", "info"),
          ("FN+Up/Dn", "bright"), ("SEL hold", "pin mode")]
