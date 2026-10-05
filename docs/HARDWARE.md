@@ -52,9 +52,10 @@ latches it high as its first action.
 
 ## Other peripherals (left untouched)
 
-microSD on SPI1 (GPIO12–15) — our firmware never initializes it, so card contents
-cannot change. WS2812 LEDs GPIO4, IR GPIO26/27/7, speaker PWM GPIO25, I²C GPIO2/3
-(accelerometer LIS3DH), touch IRQ GPIO1.
+microSD on SPI1 (GPIO12 MISO, 13 CS, 14 SCK, 15 MOSI): since fw 0.3 exposed to the PC as a
+USB drive (read/write; `firmware/src/sdcard.c`, `msc_disk.c`). LIS3DH accelerometer on I²C1
+(GPIO2 SDA, GPIO3 SCL, address 0x18): since fw 0.3 its click engine reports taps
+(`firmware/src/accel.c`). WS2812 LEDs GPIO4, IR GPIO26/27/7, speaker PWM GPIO25, touch IRQ GPIO1.
 
 ## Stock firmware images (independent recovery path)
 

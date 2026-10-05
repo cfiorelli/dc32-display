@@ -176,6 +176,17 @@ class Daemon:
         self.force_refresh()
         log.info("wake (%s) after %d min", why, (time.time() - self.sleep_t) // 60)
 
+    def on_tap(self, ev):
+        """Accelerometer taps: double-tap sleeps; while asleep any tap wakes. A single tap while awake
+        does nothing, so a bump on the desk can't blank the screen."""
+        log.info("tap x%d", ev.count)
+        if not self.cfg.get("tap_sleep", True) or time.time() - self.sleep_t < 1.5 and self.sleeping:
+            return                       # the double-tap that just put it to sleep
+        if self.sleeping:
+            self.wake("tap")
+        elif ev.count >= 2:
+            self.sleep()
+
     def check_wake(self):
         """PC input after the sleep command (1 s grace: the shortcut's own keys) wakes the badge."""
         idle_ms = self.be._idle_ms() if hasattr(self.be, "_idle_ms") else None
@@ -445,6 +456,11 @@ class Daemon:
                 self.wake("command")
             else:
                 self.sleep()
+        elif name in ("sd_rw", "sd_ro"):   # microSD over USB; remount on the PC to pick it up
+            self.cfg["sd_writable"] = name == "sd_rw"
+            self.send(P.set_sd_write(self.cfg["sd_writable"]))
+            self._save_pref("sd_writable", self.cfg["sd_writable"])
+            self.say("microSD: " + ("read/write" if self.cfg["sd_writable"] else "read-only"))
         elif name == "wake":
             self.wake("command")
         elif name == "bootsel":            # for tools/badgetool.py flash while the daemon owns USB
@@ -660,6 +676,8 @@ class Daemon:
             self.on_button(ev)
         elif isinstance(ev, P.MenuResult):
             self.on_menu_result(ev)
+        elif isinstance(ev, P.TapEvent):
+            self.on_tap(ev)
         elif isinstance(ev, P.DeviceError):
             log.warning("badge decode error %s/%s -> resync + full refresh", ev.code, ev.detail)
             self.send(P.SYNC_BYTES)
@@ -915,7 +933,9 @@ class Daemon:
         self.dimmed = False
         self.last_badge_input = time.time()
         self._leds_last = None
-        self.send(P.set_brightness(self.brightness) + P.set_timing(int(self.cfg.get("long_press_ms", 600)), 400, 90))
+        self.send(P.set_brightness(self.brightness) + P.set_timing(int(self.cfg.get("long_press_ms", 600)), 400, 90)
+                  + P.set_tap(int(self.cfg.get("tap_threshold", 32)) if self.cfg.get("tap_sleep", True) else 0)
+                  + P.set_sd_write(bool(self.cfg.get("sd_writable", False))))
         self.say(f"DC32 Display host {__version__}", f"fw {self.badge.info.fw}")
 
     def run(self, once_seconds: float | None = None):
