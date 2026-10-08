@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # GNOME keyboard shortcuts for the badge (user-level, no sudo). Re-running is safe; --remove undoes them.
 #   Ctrl+Alt+B        runner costs view <-> screen mirroring
-#   Ctrl+Alt+H        cheat sheet of all shortcuts on the badge
+#   Ctrl+Alt+H        cheat sheet of all shortcuts on the badge (number keys run them while it's open)
+#   Ctrl+Alt+R        refresh the runner dashboard's GitHub data now
 #   Ctrl+Alt+S        sleep: backlight off until any keyboard/mouse/badge input
 #   Ctrl+Alt+G        next light mode (off, bright, wave, rainbow, rave, runner status)
 #   Ctrl+Alt+Z        zoom: fit -> 2:1 -> 1:1        (B on the badge / Ctrl+Alt+X: back to fit)
@@ -13,6 +14,7 @@ BIN="$HOME/.local/bin/dc32host"
 KEYS=(
   "dc32-runner|DC32 badge: runner view / mirror|<Primary><Alt>b|toggle_runner"
   "dc32-help|DC32 badge: shortcut cheat sheet|<Primary><Alt>h|toggle_help"
+  "dc32-refresh|DC32 badge: refresh runner data now|<Primary><Alt>r|refresh_data"
   "dc32-lights|DC32 badge: next light mode|<Primary><Alt>g|lights_next"
   "dc32-sleep|DC32 badge: sleep (screen off, any input wakes)|<Primary><Alt>s|sleep"
   "dc32-zoom|DC32 badge: zoom|<Primary><Alt>z|zoom_cycle"
