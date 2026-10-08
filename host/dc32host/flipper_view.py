@@ -10,19 +10,13 @@ import numpy as np
 from PIL import Image, ImageDraw
 
 from . import capture as C
-from .runner_view import BG, INK, INK2, MUTED, GRID, OK, _ttf
+from .runner_view import BG, INK, INK2, MUTED, GRID, OK, _ttf, kb_pill
 
 ORANGE = (255, 140, 41)            # Flipper backlight + "keys here" highlight
 PIXEL = (10, 10, 10)
 X0, Y0, SW, SH = 0, 40, 320, 160   # the Flipper screen, full badge width
 
 
-def _pill(d, right, y, text, font, bg, fg):
-    w = d.textlength(text, font=font)
-    x0 = right - w - 12
-    d.rounded_rectangle([x0, y, right, y + 18], radius=4, fill=bg)
-    d.text((x0 + 6, y + 2), text, font=font, fill=fg)
-    return x0
 
 
 class FlipperView:
@@ -38,11 +32,7 @@ class FlipperView:
         d.ellipse([8, 11, 18, 21], fill=OK if live else MUTED)
         name = f"Flipper {self.link.name}" if self.link.name else "Flipper Zero"
         d.text((26, 6), name, font=self.f_big, fill=INK)
-        # keyboard pill, top-right: the glanceable "where does my typing go" indicator
-        if self.kb_here:
-            _pill(d, C.OUT_W - 6, 6, "keys: HERE", self.f_pill, ORANGE, (0, 0, 0))
-        else:
-            _pill(d, C.OUT_W - 6, 6, "keys: PC", self.f_pill, (60, 60, 58), INK2)
+        kb_pill(d, self.kb_here)
         d.line([0, 30, C.OUT_W, 30], fill=GRID)
 
         if self.link.frame is not None:

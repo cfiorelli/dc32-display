@@ -956,6 +956,7 @@ class Daemon:
             self._flipper()[1].kb_here = getattr(self, "kb_focus", None) == "flipper"
             return time.time(), self._flipper()[1].render(), False
         if self.view == "sdr":
+            self._sdr()[1].kb_here = getattr(self, "kb_focus", None) == "sdr"
             return time.time(), self._sdr()[1].render(), False
         if self.view == "bench":
             self._bench()[1].kb_here = getattr(self, "kb_focus", None) == "bench"
@@ -1072,14 +1073,7 @@ class Daemon:
                 f"capture->badge {s['c2a_ms']:.0f} ms (p95 {s['c2a_p95']:.0f})  rtt {s['rtt_ms']:.0f}",
                 f"fw {info.fw if info else '?'}  host {__version__}",
             ], where="top")
-        if getattr(self, "kb_focus", None) and self.view not in ("flipper", "bench"):   # these label it themselves
-            import numpy as np
-            from PIL import Image, ImageDraw
-            pil = Image.fromarray(out)
-            d = ImageDraw.Draw(pil)
-            d.rectangle([C.OUT_W - 40, 0, C.OUT_W - 1, 13], fill=(255, 140, 41))
-            d.text((C.OUT_W - 36, 1), "KEYS", font=C.font(), fill=(0, 0, 0))
-            out = np.asarray(pil).copy()
+        # the keyboard-capture pill is drawn by each keyboard view (flipper/sdr/bench) via kb_pill()
         if self.toast and now < self.toast[0]:
             out = C.draw_lines(out, self.toast[1])
         elif self.toast:

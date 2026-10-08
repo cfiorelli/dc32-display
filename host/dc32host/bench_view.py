@@ -19,7 +19,7 @@ from PIL import Image, ImageDraw
 
 from . import capture as C
 from . import rfbench as B
-from .runner_view import BG, INK, INK2, MUTED, GRID, OK, WARN, BAD, HOSTED, SELF, _ttf
+from .runner_view import BG, INK, INK2, MUTED, GRID, OK, WARN, BAD, HOSTED, SELF, _ttf, kb_pill
 
 log = logging.getLogger("dc32.bench")
 
@@ -152,8 +152,9 @@ class BenchView:
         d = ImageDraw.Draw(img)
         colour = {"pass": OK, "fail": BAD, "error": BAD, "armed": WARN, "replaying": WARN}.get(b.state, INK2)
         d.text((8, 4), f"RF bench  {b.freq / 1e6:.2f} MHz", font=self.f_big, fill=INK)
+        pill_left = kb_pill(d, getattr(self, "kb_here", False))
         st = {"pass": "PASS", "fail": "FAIL"}.get(b.state, b.state.upper())
-        d.text((C.OUT_W - 8 - d.textlength(st, font=self.f_b), 6), st, font=self.f_b, fill=colour)
+        d.text((pill_left - 8 - d.textlength(st, font=self.f_b), 6), st, font=self.f_b, fill=colour)
         d.line([0, 26, C.OUT_W, 26], fill=GRID)
         if b.orig:
             self._frame(d, b.orig.pulses, 34, 26, SELF)
