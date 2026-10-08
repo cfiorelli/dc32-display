@@ -627,9 +627,6 @@ class Daemon:
             buttons = list(self.FLIPPER_BUTTONS) if mouse and self.cfg.get("flipper_mouse", True) else []
             self.be.grab_input("badge-keys", keys, lambda e: self.ctl_q.put(prefix + e),
                                buttons=buttons, shift=True)
-        if getattr(self, "flipper", None):
-            self.flipper[1].input_hint = ("arrows=move Enter=OK Bksp=Back (no typing)  Ctrl+Alt+Y: stop"
-                                          if self.kb_focus == "flipper" else None)
 
     def _bench(self):
         if getattr(self, "bench", None) is None:
@@ -916,6 +913,7 @@ class Daemon:
         if self.view == "ir":
             return time.time(), self._ir().render(), False
         if self.view == "flipper":
+            self._flipper()[1].kb_here = getattr(self, "kb_focus", None) == "flipper"
             return time.time(), self._flipper()[1].render(), False
         if self.view == "sdr":
             return time.time(), self._sdr()[1].render(), False
@@ -1033,7 +1031,7 @@ class Daemon:
                 f"capture->badge {s['c2a_ms']:.0f} ms (p95 {s['c2a_p95']:.0f})  rtt {s['rtt_ms']:.0f}",
                 f"fw {info.fw if info else '?'}  host {__version__}",
             ], where="top")
-        if getattr(self, "kb_focus", None):                  # small orange "KEYS" tab, top right
+        if getattr(self, "kb_focus", None) and self.view != "flipper":   # flipper view has its own pill
             import numpy as np
             from PIL import Image, ImageDraw
             pil = Image.fromarray(out)
