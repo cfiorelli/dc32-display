@@ -5,6 +5,7 @@ import logging
 import os
 import shutil
 import subprocess
+import threading
 
 from .wininfo import WindowInfo
 
@@ -153,6 +154,52 @@ class Backend:
         xss, dpy, root, info = self._xss
         xss.XScreenSaverQueryInfo(dpy, root, info)
         return int(info.contents.idle)
+
+    def grab_help_keys(self, on_key):
+        """Grab 1-9 and Escape (any CapsLock/NumLock state) on the root window until release_help_keys(),
+        so the cheat sheet's numbers work without any focus. Own X connection, own thread."""
+        if getattr(self, "_help_grab", None):
+            return
+        from Xlib import X as XC, XK, display
+        from Xlib.error import CatchError
+        dpy = display.Display()
+        root = dpy.screen().root
+        codes = {}
+        for name in [str(i) for i in range(1, 10)] + ["Escape"]:
+            kc = dpy.keysym_to_keycode(XK.string_to_keysym(name))
+            if kc:
+                codes[kc] = name
+        mods = [0, XC.LockMask, XC.Mod2Mask, XC.LockMask | XC.Mod2Mask]
+        err = CatchError()
+        for kc in codes:
+            for m in mods:
+                root.grab_key(kc, m, True, XC.GrabModeAsync, XC.GrabModeAsync, onerror=err)
+        dpy.sync()
+        if err.get_error():
+            log.warning("help keys: some keys are grabbed by another program (%s)", err.get_error())
+        stop = threading.Event()
+
+        def loop():
+            while not stop.is_set():
+                while dpy.pending_events():
+                    ev = dpy.next_event()
+                    if ev.type == XC.KeyPress and ev.detail in codes:
+                        on_key(codes[ev.detail])
+                stop.wait(0.03)
+            for kc in codes:
+                for m in mods:
+                    root.ungrab_key(kc, m)
+            dpy.sync()
+            dpy.close()
+
+        threading.Thread(target=loop, daemon=True, name="help-keys").start()
+        self._help_grab = stop
+
+    def release_help_keys(self):
+        stop = getattr(self, "_help_grab", None)
+        if stop:
+            stop.set()
+            self._help_grab = None
 
     def input_mark(self):
         import time
