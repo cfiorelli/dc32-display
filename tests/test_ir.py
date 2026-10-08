@@ -23,6 +23,19 @@ class Decode(unittest.TestCase):
         self.assertEqual(I.decode(nec(0x07, 0x02, leader=(4500, 4500))), 'Samsung  addr 0x07  cmd 0x02')
         self.assertEqual(I.decode([(9000, 2250), (560, 0)]), 'NEC repeat')
 
+    def test_receiver_blips(self):
+        # as the badge's own receiver really reports it: each burst a ~30 us blip at its start, and
+        # the 9 ms leader split in two (first pairs logged 2026-10-08: 27/5049 36/1099 28/1103 30/2233)
+        bits = 0x04 | 0xFB << 8 | 0x08 << 16 | 0xF7 << 24
+        pairs = [(27, 5049), (30, 8421)]
+        for i in range(32):
+            pairs.append((30, (2250 if bits >> i & 1 else 1120) - 30))
+        pairs.append((30, 0))
+        self.assertEqual(I.decode(pairs), 'NEC  addr 0x04  cmd 0x08')
+        self.assertEqual(I.decode([(27, 5000), (30, 6200), (30, 0)]), 'NEC repeat')
+        real = [(27, 5049)] + [(30, (2250 if bits >> i & 1 else 1120) - 30) for i in range(32)] + [(30, 0)]
+        self.assertEqual(I.decode(real), 'NEC  addr 0x04  cmd 0x08')   # leader's start missed entirely
+
     def test_sony(self):
         cmd, dev = 0x15, 0x01                      # Sony TV power
         bits = [cmd >> i & 1 for i in range(7)] + [dev >> i & 1 for i in range(5)]
