@@ -126,7 +126,7 @@ class FlipperLink:
     def firmware(self) -> str:
         """e.g. 'official 1.3.4' or 'momentum mntm-009' (fork name, version)."""
         i = self.info
-        fork = i.get("firmware_origin_fork") or "?"
+        fork = i.get("firmware_origin_fork") or i.get("firmware_origin") or "?"
         return f"{fork} {i.get('firmware_version') or i.get('firmware_branch') or '?'}"
 
     def press(self, key: str, long: bool = False):
@@ -221,9 +221,11 @@ class FlipperLink:
                     if num == 33 and isinstance(v, bytes):     # device info: one key/value per message
                         kv = dict(fields(v))
                         if isinstance(kv.get(1), bytes):
-                            self.info[kv[1].decode(errors="replace")] = (kv.get(2) or b"").decode(errors="replace")
-                            if kv[1] == b"firmware_version":
-                                log.info("flipper firmware %s", self.firmware())
+                            # older firmware: firmware_version; newer property format: firmware.version
+                            k = kv[1].decode(errors="replace").replace(".", "_")
+                            self.info[k] = (kv.get(2) or b"").decode(errors="replace")
+                            if k == "firmware_version":
+                                log.info("flipper firmware %s (%d info keys)", self.firmware(), len(self.info))
                     if num == 22 and isinstance(v, bytes):
                         for n2, d in fields(v):
                             if n2 == 1 and isinstance(d, bytes) and len(d) >= 1024:
