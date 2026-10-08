@@ -2,7 +2,8 @@
 
 Speaks the Flipper's protobuf RPC (the same one qFlipper uses) on its USB serial port, hand-encoded:
 only Main.command_id (1), gui_start/stop_screen_stream (20/21), gui_screen_frame (22: data = 1024
-bytes, 128x64, SSD1306 page layout) and gui_send_input_event (23: key, type) are needed. Messages are
+bytes, 128x64, SSD1306 page layout), gui_send_input_event (23: key, type) and system_device_info
+(32 request, 33 response: key/value strings, e.g. firmware_version) are needed. Messages are
 varint-length-delimited. Needs read/write on the port (udev rule: tools/flipper_udev.sh).
 """
 from __future__ import annotations
@@ -99,6 +100,7 @@ class FlipperLink:
         self.frame_t = 0.0
         self.name = None
         self.status = "not connected"
+        self.info = {}               # device info (firmware_version, firmware_origin_fork, ...)
         self._fd = None
         self._cid = 0
         self._lock = threading.Lock()
@@ -121,6 +123,12 @@ class FlipperLink:
             except OSError:
                 pass
 
+    def firmware(self) -> str:
+        """e.g. 'official 1.3.4' or 'momentum mntm-009' (fork name, version)."""
+        i = self.info
+        fork = i.get("firmware_origin_fork") or "?"
+        return f"{fork} {i.get('firmware_version') or i.get('firmware_branch') or '?'}"
+
     def press(self, key: str, long: bool = False):
         """A full button press on the Flipper, as its own input system would emit it."""
         k = KEYS[key]
@@ -141,6 +149,8 @@ class FlipperLink:
         except BlockingIOError:
             pass
         self._fd = fd
+        self.info = {}
+        self._send(32)                                       # device info (firmware etc.)
         self._send(20)                                       # start screen stream
         self.status = "connected"
         self.name = os.path.basename(port).split("_Flipper_")[-1].split("_flip")[0] if "_Flipper_" in port else "Flipper"
@@ -208,6 +218,12 @@ class FlipperLink:
                     break
                 msg, buf = bytes(buf[i:i + ln]), buf[i + ln:]
                 for num, v in fields(msg):
+                    if num == 33 and isinstance(v, bytes):     # device info: one key/value per message
+                        kv = dict(fields(v))
+                        if isinstance(kv.get(1), bytes):
+                            self.info[kv[1].decode(errors="replace")] = (kv.get(2) or b"").decode(errors="replace")
+                            if kv[1] == b"firmware_version":
+                                log.info("flipper firmware %s", self.firmware())
                     if num == 22 and isinstance(v, bytes):
                         for n2, d in fields(v):
                             if n2 == 1 and isinstance(d, bytes) and len(d) >= 1024:
