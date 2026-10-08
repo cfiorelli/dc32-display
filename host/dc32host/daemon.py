@@ -444,8 +444,16 @@ class Daemon:
         elif name == "refresh_data":       # Ctrl+Alt+R: fetch GitHub runner data now
             self._runner().data.refresh_now()
             self.say("Updating runner data")
-        elif name in ("help", "toggle_help"):
-            self.set_view(self.prev_view if self.view == "help" else "help")
+        elif name in ("help", "toggle_help"):     # Ctrl+Alt+H: page 1 -> page 2 -> close
+            from .help_view import PAGES
+            if self.view != "help":
+                self.help_page = 0
+                self.set_view("help")
+            elif getattr(self, "help_page", 0) + 1 < PAGES:
+                self.help_page += 1
+                self.force_refresh()
+            else:
+                self.set_view(self.prev_view if self.prev_view != "help" else "mirror")
         elif name in ("lights_next", "lights_cycle"):
             from .lights import LABELS
             self.lights.next_mode()
@@ -803,6 +811,11 @@ class Daemon:
         if self.view == "help" and ev.button == "b" and ev.event == "short":
             self.set_view(self.prev_view)
             return
+        if self.view == "help" and ev.button in ("left", "right") and ev.event == "short":
+            from .help_view import PAGES
+            self.help_page = (getattr(self, "help_page", 0) + (1 if ev.button == "right" else -1)) % PAGES
+            self.force_refresh()
+            return
         prefix = "fn+" if ev.fn_held else ""
         key = f"{prefix}{ev.button}.{ev.event}"
         act = self.cfg["buttons"].get(key)
@@ -893,7 +906,7 @@ class Daemon:
             return time.time(), self.runner_frame(), False
         if self.view == "help":
             from . import help_view
-            return time.time(), help_view.render(), False
+            return time.time(), help_view.render(getattr(self, "help_page", 0)), False
         if self.view == "ir":
             return time.time(), self._ir().render(), False
         if self.view == "flipper":
