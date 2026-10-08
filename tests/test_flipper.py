@@ -2,6 +2,7 @@
 from pathlib import Path
 import sys
 import unittest
+from unittest.mock import patch
 from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'host'))
@@ -83,6 +84,30 @@ class View(unittest.TestCase):
         d.view = 'mirror'
         D.Daemon.action(d, 'keyboard')                          # nothing to control here
         self.assertEqual(len(calls), 2)
+
+
+
+class KeyboardIndicator(unittest.TestCase):
+    def texts(self, kb_here):
+        from dc32host import flipper as F, flipper_view as V
+        link = SimpleNamespace(frame=F.frame_to_bitmap(bytes([0x24]) * 1024), status='connected', name='Nefll03')
+        v = V.FlipperView(link); v.kb_here = kb_here
+        seen = []
+        from PIL import ImageDraw
+        orig = ImageDraw.ImageDraw.text
+        def rec(self, xy, text, *a, **k):
+            seen.append(text); return orig(self, xy, text, *a, **k)
+        with patch.object(ImageDraw.ImageDraw, 'text', rec):
+            v.render()
+        return seen
+
+    def test_pill_and_hint_per_state(self):
+        pc = self.texts(False)
+        self.assertIn('keys: PC', pc)
+        self.assertTrue(any('Ctrl+Alt+Y: keyboard here' in t for t in pc))
+        here = self.texts(True)
+        self.assertIn('keys: HERE', here)
+        self.assertTrue(any('no typing' not in t and 'releases keyboard' in t for t in here))
 
 
 if __name__ == '__main__':
