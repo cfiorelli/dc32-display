@@ -43,6 +43,7 @@ class Bench:
 
     def _job(self, fn):
         if not self._busy.acquire(blocking=False):
+            self.msg = "busy — wait for the current step to finish"   # feedback, not a silent drop
             return
         def run():
             try:
@@ -67,7 +68,8 @@ class Bench:
                              len(d.bits), d.te_us, d.repeats, self.freq / 1e6)
                     self.msg = "captured: START to replay + verify"
                     return
-            self.state, self.msg = "idle", "nothing decodable heard (fixed-code OOK only)"
+            self.state, self.msg = "idle", "nothing heard — transmit now, or self-test"
+            log.info("bench arm: nothing decodable at %.2f MHz", self.freq / 1e6)
         self._job(go)
 
     def replay_verify(self):
