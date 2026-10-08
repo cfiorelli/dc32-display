@@ -10,6 +10,10 @@ dependencies = [
   "rich>=13",   # for terminal dashboards launched from the badge (A-hold / menu)
 ]
 
+[project.optional-dependencies]
+# RTL-SDR views (Ctrl+Alt+W): pip install -e 'host[sdr]'. pyrtlsdr < 0.3 matches Ubuntu's librtlsdr 0.6.
+sdr = ["pyrtlsdr<0.3", "scipy>=1.10"]
+
 [project.scripts]
 dc32host = "dc32host.__main__:main"
 

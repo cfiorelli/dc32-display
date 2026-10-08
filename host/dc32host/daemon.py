@@ -400,7 +400,8 @@ class Daemon:
                 return
             from .help_view import NUMBERED
             key = name[8:]
-            act = NUMBERED[int(key) - 1] if key.isdigit() and 0 < int(key) <= len(NUMBERED) else None
+            n = 10 if key == "0" else int(key) if key.isdigit() else 0      # 0 = the 10th entry
+            act = NUMBERED[n - 1] if 0 < n <= len(NUMBERED) else None
             if key == "Escape" or act:
                 self.set_view(self.prev_view if self.prev_view != "help" else "mirror")
             if act and act != "toggle_help":
@@ -415,6 +416,13 @@ class Daemon:
                    else self.FLIPPER_KEYS.get(ev))
             if key:
                 self._flipper()[0].press(key, long=long)
+        elif name in ("sdr_view", "toggle_sdr"):     # Ctrl+Alt+W: spectrum + waterfall
+            self.set_view("mirror" if self.view == "sdr" else "sdr")
+        elif name.startswith("skey:"):     # PC arrows / Enter while the spectrum is up
+            if self.view == "sdr":
+                k = {"Up": "up", "Down": "down", "Left": "left", "Right": "right", "Return": "preset"}.get(name[5:])
+                if k:
+                    self._sdr()[1].key(k)
         elif name in ("flipper", "toggle_flipper"):   # Ctrl+Alt+F
             self.set_view("mirror" if self.view == "flipper" else "flipper")
         elif name in ("ir_scope", "toggle_ir"):   # Ctrl+Alt+E
@@ -530,6 +538,15 @@ class Daemon:
     def set_view(self, view):
         if view == "help" and self.view != "help":
             self.prev_view = self.view
+        if view == "sdr":
+            self._sdr()[0].start()
+            if hasattr(self.be, "grab_input"):
+                self.be.grab_input("sdr", ["Up", "Down", "Left", "Right", "Return"],
+                                   lambda e: self.ctl_q.put("skey:" + e))
+        elif self.view == "sdr":
+            self._sdr()[0].stop()
+            if hasattr(self.be, "release_input"):
+                self.be.release_input("sdr")
         if view == "flipper":
             self._flipper()[0].start()
             self.grab_flipper_input(True)
@@ -547,7 +564,7 @@ class Daemon:
             self._runner()                 # starts the background fetch on first use
         if view != "help":
             self.say({"mirror": "Mirroring screen", "runner": "Runner costs", "paused": "Display paused",
-                      "ir": "IR scope", "flipper": "Flipper"}[view],
+                      "ir": "IR scope", "flipper": "Flipper", "sdr": "Spectrum (SDR)"}[view],
                      *(["FN: menu"] if view != "mirror" else []))
         self.vp.reset()
         self.force_refresh()
@@ -578,6 +595,14 @@ class Daemon:
                            buttons=buttons, shift=True)
         self._flipper()[1].input_hint = ("keyboard + mouse" if buttons else "keyboard") + \
             " drive the Flipper  -  Ctrl+Alt+F to leave"
+
+    def _sdr(self):
+        if getattr(self, "sdr", None) is None:
+            from .sdr import SdrSource
+            from .sdr_view import SdrView
+            src = SdrSource(freq=float(self.cfg.get("sdr_freq", 433.92e6)))
+            self.sdr = (src, SdrView(src))
+        return self.sdr
 
     def _ir(self):
         if getattr(self, "ir", None) is None:
@@ -634,6 +659,7 @@ class Daemon:
             ("Shortcuts (Ctrl+Alt+H)", "toggle_help", self.view == "help"),
             ("IR scope (Ctrl+Alt+E)", "ir_scope", self.view == "ir"),
             ("Flipper Zero (Ctrl+Alt+F)", "flipper", self.view == "flipper"),
+            ("Spectrum / SDR (Ctrl+Alt+W)", "sdr_view", self.view == "sdr"),
             ("Sleep: screen off (Ctrl+Alt+S)", "sleep", False),
             ("Status info", "info", False),
         ]
@@ -721,6 +747,12 @@ class Daemon:
                 return
         elif "fn" in ev.held:
             self.fn_used_as_modifier = True
+        if self.view == "sdr" and ev.button in ("up", "down", "left", "right", "a") and "fn" not in ev.held:
+            if ev.event in ("down", "repeat") and ev.button != "a":
+                self._sdr()[1].key(ev.button)
+            elif ev.event == "short" and ev.button == "a":
+                self._sdr()[1].key("preset")
+            return
         if self.view == "flipper" and ev.button != "fn" and "fn" not in ev.held:
             key = {"up": "up", "down": "down", "left": "left", "right": "right", "a": "ok", "b": "back",
                    "select": "back", "start": "ok"}.get(ev.button)
@@ -827,6 +859,8 @@ class Daemon:
             return time.time(), self._ir().render(), False
         if self.view == "flipper":
             return time.time(), self._flipper()[1].render(), False
+        if self.view == "sdr":
+            return time.time(), self._sdr()[1].render(), False
         src_wi = self.pick_source()
         changed_src = (src_wi.handle if src_wi else None) != (self.shown.handle if self.shown else None)
         if changed_src:
