@@ -7,6 +7,7 @@
 #   Ctrl+Alt+E        IR scope: what the badge's IR receiver sees (remotes), decoded
 #   Ctrl+Alt+F        Flipper Zero (USB) screen on the badge, badge buttons drive it
 #   Ctrl+Alt+W        RTL-SDR spectrum + waterfall (arrows tune/step, Enter = next band)
+#   Ctrl+Alt+V        RF bench: Enter arm, Space replay+verify, Shift+Enter self-test
 #   Ctrl+Alt+S        sleep: backlight off until any keyboard/mouse/badge input
 #   Ctrl+Alt+G        next light mode (off, bright, wave, rainbow, rave, runner status)
 #   Ctrl+Alt+Z        zoom: fit -> 2:1 -> 1:1        (B on the badge / Ctrl+Alt+X: back to fit)
@@ -23,6 +24,7 @@ KEYS=(
   "dc32-ir|DC32 badge: IR scope|<Primary><Alt>e|ir_scope"
   "dc32-flipper|DC32 badge: Flipper Zero screen + control|<Primary><Alt>f|flipper"
   "dc32-sdr|DC32 badge: SDR spectrum + waterfall|<Primary><Alt>w|sdr_view"
+  "dc32-bench|DC32 badge: RF bench (capture, decode, Flipper replay, verify)|<Primary><Alt>v|rf_bench"
   "dc32-lights|DC32 badge: next light mode|<Primary><Alt>g|lights_next"
   "dc32-sleep|DC32 badge: sleep (screen off, any input wakes)|<Primary><Alt>s|sleep"
   "dc32-zoom|DC32 badge: zoom|<Primary><Alt>z|zoom_cycle"

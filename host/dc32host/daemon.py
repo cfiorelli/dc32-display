@@ -416,6 +416,13 @@ class Daemon:
                    else self.FLIPPER_KEYS.get(ev))
             if key:
                 self._flipper()[0].press(key, long=long)
+        elif name in ("rf_bench", "toggle_bench"):   # Ctrl+Alt+V: capture / decode / replay / verify
+            self.set_view("mirror" if self.view == "bench" else "bench")
+        elif name.startswith("bkey:"):
+            if self.view == "bench":
+                b = self._bench()[0]
+                {"Return": b.arm, "space": b.replay_verify, "Shift+Return": b.selftest,
+                 "Left": lambda: b.band(-1), "Right": lambda: b.band(1)}.get(name[5:], lambda: None)()
         elif name in ("sdr_view", "toggle_sdr"):     # Ctrl+Alt+W: spectrum + waterfall
             self.set_view("mirror" if self.view == "sdr" else "sdr")
         elif name.startswith("skey:"):     # PC arrows / Enter while the spectrum is up
@@ -539,6 +546,11 @@ class Daemon:
     def set_view(self, view):
         if view == "help" and self.view != "help":
             self.prev_view = self.view
+        if view == "bench" and hasattr(self.be, "grab_input"):
+            self.be.grab_input("bench", ["Return", "space", "Left", "Right"],
+                               lambda e: self.ctl_q.put("bkey:" + e), shift=True)
+        elif self.view == "bench" and hasattr(self.be, "release_input"):
+            self.be.release_input("bench")
         if view == "sdr":
             self._sdr()[0].start()
             if hasattr(self.be, "grab_input"):
@@ -565,7 +577,8 @@ class Daemon:
             self._runner()                 # starts the background fetch on first use
         if view != "help":
             self.say({"mirror": "Mirroring screen", "runner": "Runner costs", "paused": "Display paused",
-                      "ir": "IR scope", "flipper": "Flipper", "sdr": "Spectrum (SDR)"}[view],
+                      "ir": "IR scope", "flipper": "Flipper", "sdr": "Spectrum (SDR)",
+                      "bench": "RF bench"}[view],
                      *(["FN: menu"] if view != "mirror" else []))
         self.vp.reset()
         self.force_refresh()
@@ -596,6 +609,13 @@ class Daemon:
                            buttons=buttons, shift=True)
         self._flipper()[1].input_hint = ("keyboard + mouse" if buttons else "keyboard") + \
             " drive the Flipper  -  Ctrl+Alt+F to leave"
+
+    def _bench(self):
+        if getattr(self, "bench", None) is None:
+            from .bench_view import Bench, BenchView
+            b = Bench()
+            self.bench = (b, BenchView(b))
+        return self.bench
 
     def _sdr(self):
         if getattr(self, "sdr", None) is None:
@@ -661,6 +681,7 @@ class Daemon:
             ("IR scope (Ctrl+Alt+E)", "ir_scope", self.view == "ir"),
             ("Flipper Zero (Ctrl+Alt+F)", "flipper", self.view == "flipper"),
             ("Spectrum / SDR (Ctrl+Alt+W)", "sdr_view", self.view == "sdr"),
+            ("RF bench (Ctrl+Alt+V)", "rf_bench", self.view == "bench"),
             ("Sleep: screen off (Ctrl+Alt+S)", "sleep", False),
             ("Status info", "info", False),
         ]
@@ -748,6 +769,14 @@ class Daemon:
                 return
         elif "fn" in ev.held:
             self.fn_used_as_modifier = True
+        if self.view == "bench" and ev.button in ("a", "start", "left", "right") and "fn" not in ev.held:
+            b = self._bench()[0]
+            if ev.event == "short":
+                {"a": b.arm, "start": b.replay_verify, "left": lambda: b.band(-1),
+                 "right": lambda: b.band(1)}[ev.button]()
+            elif ev.event == "long" and ev.button == "a":
+                b.selftest()
+            return
         if self.view == "sdr" and ev.button in ("up", "down", "left", "right", "a", "start") and "fn" not in ev.held:
             if ev.event in ("down", "repeat") and ev.button not in ("a", "start"):
                 self._sdr()[1].key(ev.button)
@@ -864,6 +893,8 @@ class Daemon:
             return time.time(), self._flipper()[1].render(), False
         if self.view == "sdr":
             return time.time(), self._sdr()[1].render(), False
+        if self.view == "bench":
+            return time.time(), self._bench()[1].render(), False
         src_wi = self.pick_source()
         changed_src = (src_wi.handle if src_wi else None) != (self.shown.handle if self.shown else None)
         if changed_src:
