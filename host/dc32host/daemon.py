@@ -34,6 +34,7 @@ ZOOM_CYCLE = ["fit", "2x", "1x"]
 FAV_ID_BASE = 0x80000000
 HOME_ID_BASE = 0x40000000
 BASHRC = __import__("os").path.join(__import__("os").path.dirname(__file__), "badge_bashrc")
+DOOM2_SH = __import__("os").path.expanduser("~/.local/share/dc32-display/doom/doom2.sh")
 
 
 def control_socket_path():
@@ -278,7 +279,7 @@ class Daemon:
 
     # ================================================================ favorites
     def favorite(self, name):
-        for f in self.cfg.get("favorites", []):
+        for f in self.cfg.get("favorites", []) + CFG.BUILTIN_FAVORITES:
             if f.get("name") == name:
                 return f
         return None
@@ -339,7 +340,8 @@ class Daemon:
             return
         if fav.get("launch"):
             spec = dict(fav["launch"])
-            spec["cmd"] = [BASHRC if a == "{badge_bashrc}" else a for a in spec.get("cmd") or []]
+            spec["cmd"] = [BASHRC if a == "{badge_bashrc}" else DOOM2_SH if a == "{doom2}" else a
+                           for a in spec.get("cmd") or []]
             spec.setdefault("title", fav["name"])
             if self.be.launch(spec):
                 self.pending_fav = (fav, time.time() + 15)
@@ -424,6 +426,12 @@ class Daemon:
                 self._save_pref("lights_mode", self.lights.mode)
         elif name in ("pause", "toggle_pause"):
             self.set_view("mirror" if self.view == "paused" else "paused")
+        elif name == "doom2":              # Ctrl+Alt+P: Doom II on the PC, mirrored 1:1 on the badge
+            if not os.path.exists(DOOM2_SH):
+                self.say("Doom II not installed", "run tools/install_doom.sh")
+                return
+            self.view = "mirror"
+            self.open_favorite("Doom II")
         elif name == "badge_terminal":
             self.view = "mirror"
             self.open_favorite("Badge Terminal")
