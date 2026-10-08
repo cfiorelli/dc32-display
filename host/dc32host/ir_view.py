@@ -20,33 +20,55 @@ def _near(v, want, tol=0.3):
     return abs(v - want) <= want * tol
 
 
+def _bits_by_period(periods, zero, one, n):
+    """Pulse-distance bits: start-to-start periods near `zero` / `one` us. None unless all n match."""
+    out = []
+    for p in periods[:n]:
+        if _near(p, zero, 0.25):
+            out.append(0)
+        elif _near(p, one, 0.25):
+            out.append(1)
+        else:
+            return None
+    return out if len(out) == n else None
+
+
 def decode(pairs):
-    """Name the remote protocol and code for a frame of (mark_us, space_us) pairs, or None."""
+    """Name the remote protocol and code for a frame of (mark_us, space_us) pairs, or None.
+
+    Decodes from start-to-start periods (mark + space), not mark widths: the badge's IrDA receiver
+    may report a long burst as a short blip at its start (or as carrier pulses), but the rhythm of
+    burst starts is exact, and NEC / Samsung / Sony all carry their bits in it."""
     if not pairs:
         return None
-    m0, s0 = pairs[0]
-    # NEC: 9 ms / 4.5 ms leader, 32 bits as 560 us marks + 560 (0) / 1690 (1) us spaces; repeat 9 / 2.25 ms.
-    # Samsung: same bits after a 4.5 / 4.5 ms leader.
-    if _near(m0, 9000) and _near(s0, 2250) and len(pairs) <= 2:
+    periods = [m + s for m, s in pairs[:-1]]
+    total = sum(periods) + pairs[-1][0]
+    # NEC repeat: 9 ms burst + 2.25 ms gap + stop burst (11.8 ms, 2 bursts; the leader may split)
+    if len(pairs) <= 3 and _near(total, 11800, 0.15):
         return "NEC repeat"
-    if (_near(m0, 9000) or _near(m0, 4500)) and _near(s0, 4500) and len(pairs) >= 33:
-        bits = 0
-        for i, (m, s) in enumerate(pairs[1:33]):
-            if not _near(m, 560, 0.5):
-                return None
-            bits |= (1 if s > 1120 else 0) << i
-        a, na, c, nc = bits & 0xFF, (bits >> 8) & 0xFF, (bits >> 16) & 0xFF, bits >> 24
-        name = "NEC" if _near(m0, 9000) else "Samsung"
+    # NEC / Samsung: 32 bits, 0 = 1120 us, 1 = 2250 us start-to-start, after a 13.5 / 9 ms leader
+    for k in range(0, max(0, len(periods) - 31)):
+        bits = _bits_by_period(periods[k:], 1120, 2250, 32)
+        if bits is None:
+            continue
+        lead = sum(periods[:k])
+        v = sum(b << i for i, b in enumerate(bits))
+        # a long lead-in: NEC's 13.5 ms leader (the receiver may only catch its tail), or Samsung's 9 ms
+        name = "Samsung" if _near(lead, 9000, 0.08) else "NEC" if lead > 3000 else "NEC-like"
+        a, na, c, nc = v & 0xFF, (v >> 8) & 0xFF, (v >> 16) & 0xFF, v >> 24
         if c ^ nc != 0xFF:
-            return f"{name} 0x{bits:08X}"
+            return f"{name} 0x{v:08X}"
         addr = f"0x{a:02X}" if a ^ na == 0xFF else f"0x{a | na << 8:04X}"     # extended NEC: 16-bit address
         return f"{name}  addr {addr}  cmd 0x{c:02X}"
-    # Sony SIRC: 2.4 ms leader, 600 us spaces, bits in the mark: 1200 us = 1, 600 us = 0, LSB first
-    if _near(m0, 2400, 0.25) and len(pairs) - 1 in (12, 15, 20):
-        bits = [1 if m > 900 else 0 for m, _ in pairs[1:]]
-        cmd = sum(b << i for i, b in enumerate(bits[:7]))
-        dev = sum(b << i for i, b in enumerate(bits[7:]))
-        return f"Sony {len(bits)}-bit  dev 0x{dev:02X}  cmd 0x{cmd:02X}"
+    # Sony SIRC: 3 ms leader period, then 1 = 1800 us, 0 = 1200 us; 12/15/20 bits, LSB first
+    if periods and _near(periods[0], 3000, 0.2):
+        n = len(pairs) - 1
+        bits = _bits_by_period(periods[1:] + [1200 if pairs[-1][0] < 900 else 1800], 1200, 1800, n) \
+            if n in (12, 15, 20) else None
+        if bits:
+            cmd = sum(b << i for i, b in enumerate(bits[:7]))
+            dev = sum(b << i for i, b in enumerate(bits[7:]))
+            return f"Sony {n}-bit  dev 0x{dev:02X}  cmd 0x{cmd:02X}"
     return None
 
 
