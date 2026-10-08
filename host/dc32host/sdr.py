@@ -16,8 +16,12 @@ log = logging.getLogger("dc32.sdr")
 
 NBINS = 1024
 RATE = 2.048e6
-PRESETS = [("433.92 ISM", 433.92e6), ("315 ISM", 315.0e6), ("868 ISM", 868.3e6), ("915 ISM", 915.0e6),
-           ("137 wx sats", 137.5e6), ("145.8 ISS", 145.8e6), ("1090 ADS-B", 1090e6), ("FM radio", 98.1e6)]
+# (name, frequency, audio mode) - see sdr_audio.MODES
+PRESETS = [("433.92 ISM", 433.92e6, None), ("315 ISM", 315.0e6, None), ("868 ISM", 868.3e6, None),
+           ("915 ISM", 915.0e6, None), ("137 wx sats", 137.5e6, "NFM"), ("145.8 ISS", 145.8e6, "NFM"),
+           ("120.5 airband", 120.5e6, "AM"), ("1090 ADS-B", 1090e6, None), ("FM radio", 98.1e6, "WFM")]
+OFFSET = 250e3                 # the dongle tunes this far above the listening frequency (DC spike off-signal)
+OFFSET_BINS = int(round(OFFSET / RATE * 1024))
 STEPS = [10e3, 100e3, 1e6, 10e6]
 
 
@@ -34,6 +38,8 @@ def spectrum_db(x: np.ndarray, nbins: int = NBINS) -> np.ndarray:
 class SdrSource:
     def __init__(self, freq=433.92e6, gain="auto"):
         self.freq, self.gain = freq, gain
+        self.audio_mode = None       # None | WFM | NFM | AM (sdr_audio)
+        self._demod = self._player = None
         self.spec = None             # latest spectrum (dB)
         self.peak = None             # peak hold (decays)
         self.rows = []               # waterfall history, newest last
@@ -56,10 +62,29 @@ class SdrSource:
         with self._lock:
             self.peak = None
 
+    def set_audio(self, mode):
+        self.audio_mode = mode
+        self._audio_changed = True
+
+    def _audio(self, x):
+        if getattr(self, "_audio_changed", False) or (self.audio_mode is None) != (self._demod is None):
+            self._audio_changed = False
+            if self._player:
+                self._player.close()
+            self._demod = self._player = None
+            if self.audio_mode:
+                from .sdr_audio import Demod, Player
+                self._demod, self._player = Demod(self.audio_mode, RATE, OFFSET), Player()
+        if self._demod:
+            self._player.write(self._demod.process(x))
+
     def _loop(self):
         dev = None
         while True:
             if not self._want:
+                if self._player:
+                    self._player.close()
+                    self._demod = self._player = None
                 if dev is not None:
                     dev.close()
                     dev = None
@@ -81,7 +106,7 @@ class SdrSource:
             try:
                 if self._retune:
                     self._retune = False
-                    dev.center_freq = self.freq
+                    dev.center_freq = self.freq + OFFSET
                     dev.read_samples(16 * 1024)              # settle after the PLL retunes
                 x = dev.read_samples(64 * 1024)
             except Exception as e:
@@ -94,7 +119,10 @@ class SdrSource:
                 self.status, self.error = "SDR lost", str(e)[:60]
                 time.sleep(1)
                 continue
-            s = spectrum_db(x)
+            self._audio(x)
+            # the dongle sits OFFSET above self.freq: shift so the display is centred on self.freq
+            s = np.roll(spectrum_db(x), OFFSET_BINS)
+            s[:OFFSET_BINS] = np.median(s)
             with self._lock:
                 self.spec = s
                 self.peak = s if self.peak is None else np.maximum(s, self.peak - 0.3)

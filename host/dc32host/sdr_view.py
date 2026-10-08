@@ -54,7 +54,13 @@ class SdrView:
             self.step_i = max(0, self.step_i - 1)
         elif k == "preset":
             self.preset_i = (self.preset_i + 1) % len(PRESETS)
-            self.src.tune(PRESETS[self.preset_i][1])
+            name, f, mode = PRESETS[self.preset_i]
+            self.src.tune(f)
+            if self.src.audio_mode is not None or mode is None:   # keep listening if already on
+                self.src.set_audio(mode)
+        elif k == "audio":
+            from .sdr_audio import MODES
+            self.src.set_audio(MODES[(MODES.index(self.src.audio_mode) + 1) % len(MODES)])
 
     # ---------------------------------------------------------------- drawing
     def render(self) -> np.ndarray:
@@ -71,6 +77,8 @@ class SdrView:
         d = ImageDraw.Draw(img)
         f0, span = self.src.freq, RATE
         d.text((4, 3), mhz(f0), font=self.f_b, fill=INK)
+        if getattr(self.src, "audio_mode", None):
+            d.text((4 + d.textlength(mhz(f0), font=self.f_b) + 8, 5), "♪ " + self.src.audio_mode, font=self.f_s, fill=OK)
         info = f"step {STEPS[self.step_i] / 1e3:g} kHz   span 2.0 MHz"
         d.text((W - 4 - d.textlength(info, font=self.f_s), 5), info, font=self.f_s, fill=INK2)
         d.line([0, SPEC_Y1 + 1, W, SPEC_Y1 + 1], fill=GRID)
@@ -87,6 +95,6 @@ class SdrView:
         else:
             msg = self.src.error or self.src.status
             d.text((8, 120), f"SDR: {msg}", font=self.f, fill=INK2)
-        hint = "◀▶ tune ▲▼ step A band"
+        hint = "◀▶ tune ▲▼ step A band START ♪"
         d.text((W - 4 - d.textlength(hint, font=self.f_s), 226), hint, font=self.f_s, fill=MUTED)
         return np.asarray(img).copy()
