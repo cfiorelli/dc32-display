@@ -18,6 +18,7 @@ def stub(idle_s):
     d.be = SimpleNamespace(_idle_ms=lambda: idle_s[0] * 1000)
     d.sleeping, d.sleep_t, d.dimmed, d.brightness = False, 0.0, False, 22
     d._tap_last = 0.0
+    d._knock_t = 0.0
     d.prev, d._leds_last, d.last_badge_input = object(), None, 0.0
     d.force_refresh = lambda: setattr(d, 'prev', None)
     d.cfg = {'buttons': {'a.short': 'zoom_cycle'}}
@@ -52,22 +53,33 @@ class Sleep(unittest.TestCase):
         d.on_button(SimpleNamespace(button='a', event='short', held=(), fn_held=False))
         self.assertEqual(d.actions, [])         # the waking press did not also zoom
 
-    def test_tap_toggles_sleep_once_per_physical_tap(self):
-        # 35 tap events recorded from real finger taps (2026-10-05): each tap rings as a burst
-        rec = [2443.552, 2443.555, 2443.595, 2602.953, 2604.154] + [2604.154] * 6 + [
-            2607.193, 2607.213, 2607.233, 2607.260, 2607.313, 2607.350, 2607.353, 2607.453, 2607.473,
-            2607.493, 2607.517, 2607.533, 2607.613, 2607.653, 2607.713, 2629.994, 2630.017, 2630.085,
-            2630.094, 2630.152, 2630.154, 2630.179, 2646.254, 2646.306]
+    def run_taps(self, times):
         d = stub([999.0])
         d.wake = lambda why: setattr(d, 'sleeping', False)
         states = []
-        for t in rec:
+        for t in times:
             with patch.object(D.time, 'time', return_value=t):
                 was = d.sleeping
                 d.on_tap(P.TapEvent(1))
                 if d.sleeping != was:
                     states.append(d.sleeping)
-        self.assertEqual(states, [True, False, True, False, True, False])   # 6 taps, 6 toggles
+        return states
+
+    def test_single_knocks_are_ignored(self):
+        # 35 tap events recorded from real single taps (2026-10-05), each ringing as a burst
+        rec = [2443.552, 2443.555, 2443.595, 2602.953, 2604.154] + [2604.154] * 6 + [
+            2607.193, 2607.213, 2607.233, 2607.260, 2607.313, 2607.350, 2607.353, 2607.453, 2607.473,
+            2607.493, 2607.517, 2607.533, 2607.613, 2607.653, 2607.713, 2629.994, 2630.017, 2630.085,
+            2630.094, 2630.152, 2630.154, 2630.179, 2646.254, 2646.306]
+        self.assertEqual(self.run_taps(rec), [])
+
+    def test_knock_knock_toggles(self):
+        ring = [0, 0.02, 0.05, 0.09, 0.15]                  # one knock's ringing events
+        knock = lambda t: [t + r for r in ring]
+        seq = knock(100) + knock(100.5)                      # knock-knock: sleep
+        seq += knock(110) + knock(110.6) + knock(111.2)      # knock-knock (+ a stray third): wake
+        seq += knock(120) + knock(121.5)                     # too slow: nothing
+        self.assertEqual(self.run_taps(seq), [True, False])
         self.assertEqual(P.parse(P.TAP, bytes([2])), P.TapEvent(2))
 
     def test_help_number_keys(self):
