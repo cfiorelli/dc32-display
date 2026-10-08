@@ -11,6 +11,7 @@
 #include "leds.h"
 #include "accel.h"
 #include "sdcard.h"
+#include "ir.h"
 #include "tusb.h"
 
 #include "board_dc32.h"
@@ -196,6 +197,9 @@ static void on_msg(decoder_t *d, uint8_t type, const uint8_t *p, uint32_t len)
         if (len >= 1) msc_writable = p[0] != 0;
         break;
     }
+    case DC32_MSG_SET_IR:
+        if (len >= 1) ir_enable(p[0] != 0);
+        break;
     case DC32_MSG_SET_TAP:
         if (len >= 1) accel_set_tap_threshold(p[0]);
         break;
@@ -348,6 +352,18 @@ int main(void)
             last_tap_poll = now;
             uint8_t tap = accel_poll_tap();
             if (tap && s_host_alive) send_msg(DC32_MSG_TAP, &tap, 1);
+        }
+
+        // IR scope: completed frames of marks/spaces
+        if (ir_enabled() && s_host_alive) {
+            static uint16_t pairs[2 * 128];
+            static uint8_t msg[1 + 4 * 128];
+            int n = ir_take_frame(pairs, 128);
+            if (n) {
+                msg[0] = (uint8_t)n;
+                for (int i = 0; i < 2 * n; i++) wr16(msg + 1 + 2 * i, pairs[i]);
+                send_msg(DC32_MSG_IR_FRAME, msg, 1u + 4u * (uint32_t)n);
+            }
         }
 
         // host liveness

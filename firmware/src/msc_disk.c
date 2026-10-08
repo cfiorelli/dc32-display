@@ -109,6 +109,11 @@ int32_t tud_msc_scsi_cb(uint8_t lun, uint8_t const scsi_cmd[16], void *buffer, u
         accel_self_test_pulse();
         return 0;
     }
+    case 0xC2: {                                   // vendor: blink a test NEC code (addr, cmd) from our IR LED
+        extern void ir_send_test_nec(uint8_t addr, uint8_t cmd);
+        ir_send_test_nec(scsi_cmd[1], scsi_cmd[2]);
+        return 0;
+    }
     case 0x35:                                     // SYNCHRONIZE CACHE: writes are already on the card
         return 0;
     default:

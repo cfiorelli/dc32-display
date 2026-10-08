@@ -81,7 +81,7 @@ class Sleep(unittest.TestCase):
         D.Daemon.action(d, 'helpkey:2')               # 2 = refresh data: closes help, then runs it
         self.assertEqual((views, d.actions), (['mirror'], ['refresh_data']))
         d.view = 'help'
-        D.Daemon.action(d, 'helpkey:9')               # no such number: help stays up
+        D.Daemon.action(d, 'helpkey:0')               # no such number: help stays up
         self.assertEqual(d.view, 'help')
         D.Daemon.action(d, 'helpkey:Escape')
         self.assertEqual(d.view, 'mirror')
