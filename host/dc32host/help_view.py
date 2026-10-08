@@ -13,7 +13,8 @@ KEYS = [("B", "runner view", "toggle_runner"), ("R", "refresh data", "refresh_da
         ("Z", "zoom", "zoom_cycle"), ("X", "fit", "zoom_fit"),
         ("G", "lights", "lights_next"), ("S", "sleep", "sleep"),
         ("P", "Doom II", "doom2"), ("E", "IR scope", "ir_scope"),
-        ("I J K L", "move view", None), ("H", "close help", "toggle_help")]
+        ("F", "Flipper Zero", "flipper"), ("I J K L", "move view", None),
+        ("H", "this help (Esc)", None)]
 NUMBERED = [a for _, _, a in KEYS if a]          # number key n runs NUMBERED[n - 1]
 BADGE = [("FN", "menu"), ("A", "zoom"), ("A hold", "runner view"), ("B", "back / Esc"),
          ("SELECT", "prev app"), ("START", "app list"), ("D-pad", "move view"), ("FN+B", "info"),
