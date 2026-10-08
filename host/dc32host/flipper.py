@@ -148,7 +148,7 @@ class FlipperLink:
                 pass
         except BlockingIOError:
             pass
-        self._fd = fd
+        self._fd, self._port = fd, port
         self.info = {}
         self._send(32)                                       # device info (firmware etc.)
         self._send(20)                                       # start screen stream
@@ -204,6 +204,18 @@ class FlipperLink:
                 self.status = "disconnected"
                 continue
             if not chunk:
+                # a vanished tty reads as EOF, not an error: the Flipper switched USB mode (U2F, Bad
+                # USB, UART bridge), rebooted or was unplugged. Drop the link and wait for it again.
+                if not os.path.exists(getattr(self, "_port", "") or ""):
+                    log.info("flipper went away (USB mode change / unplug)")
+                    with self._lock:
+                        try:
+                            os.close(self._fd)
+                        except OSError:
+                            pass
+                        self._fd = None
+                    self.frame, self.status = None, "Flipper left USB serial mode (waiting)"
+                    continue
                 time.sleep(0.01)
                 continue
             buf += chunk
