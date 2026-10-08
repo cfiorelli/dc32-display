@@ -135,8 +135,27 @@ class FlipperLink:
         for t in (PRESS, LONG if long else SHORT, RELEASE):
             self._send(23, field_varint(1, k) + field_varint(2, t))
 
+    @staticmethod
+    def _open_fd(port, timeout=3.0):
+        """os.open() in a helper thread: on a wedged Flipper it blocks in the kernel indefinitely."""
+        box = {}
+
+        def go():
+            try:
+                box["fd"] = os.open(port, os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK)
+            except OSError as e:
+                box["err"] = e
+        t = threading.Thread(target=go, daemon=True, name="flipper-open")
+        t.start()
+        t.join(timeout)
+        if t.is_alive():
+            raise TimeoutError("Flipper not responding: reboot it (hold LEFT + BACK) or replug")
+        if "err" in box:
+            raise box["err"]
+        return box["fd"]
+
     def _open(self, port):
-        fd = os.open(port, os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK)
+        fd = self._open_fd(port)
         a = termios.tcgetattr(fd)
         a[0] = a[1] = a[3] = 0                               # raw: no iflag/oflag/lflag processing
         a[2] = termios.CS8 | termios.CREAD | termios.CLOCAL
@@ -153,6 +172,7 @@ class FlipperLink:
         self._send(32)                                       # device info (firmware etc.)
         self._send(20)                                       # start screen stream
         self.status = "connected"
+        self._pong_t = self._ping_t = time.time()
         self.name = os.path.basename(port).split("_Flipper_")[-1].split("_flip")[0] if "_Flipper_" in port else "Flipper"
         log.info("flipper connected on %s", port)
 
@@ -189,10 +209,25 @@ class FlipperLink:
                     self.status = "no access to the Flipper: run tools/flipper_udev.sh"
                     time.sleep(2)
                     continue
+                except TimeoutError as e:
+                    log.warning("%s", e)
+                    self.frame, self.status = None, str(e)
+                    time.sleep(5)
+                    continue
                 except OSError as e:
                     self.status = f"Flipper error: {e.strerror}"
                     time.sleep(2)
                     continue
+            now = time.time()
+            if now - self._ping_t > 5:
+                self._ping_t = now
+                self._send(5)                                 # system_ping_request
+            if now - self._pong_t > 12:
+                log.warning("flipper stopped answering pings: reconnecting")
+                self._close()
+                self.frame, self.status = None, "Flipper not answering: reconnecting"
+                time.sleep(1)
+                continue
             try:
                 chunk = os.read(self._fd, 8192)
             except BlockingIOError:
@@ -230,6 +265,7 @@ class FlipperLink:
                 if len(buf) < i + ln:
                     break
                 msg, buf = bytes(buf[i:i + ln]), buf[i + ln:]
+                self._pong_t = time.time()                    # any message proves the session is alive
                 for num, v in fields(msg):
                     if num == 33 and isinstance(v, bytes):     # device info: one key/value per message
                         kv = dict(fields(v))
