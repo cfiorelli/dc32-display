@@ -35,3 +35,8 @@
 #define PIN_I2C_SDA     2
 #define PIN_I2C_SCL     3
 #define ACCEL_I2C_ADDR  0x18
+
+// IrDA transceiver (stock: pinoutRp2350defcon.h): TX LED, RX (idle high), shutdown (high = off)
+#define PIN_IRDA_OUT    26
+#define PIN_IRDA_IN     27
+#define PIN_IRDA_SD     7

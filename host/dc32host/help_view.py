@@ -12,8 +12,8 @@ from .runner_view import BG, INK, INK2, MUTED, GRID, HOSTED, _ttf
 KEYS = [("B", "runner view", "toggle_runner"), ("R", "refresh data", "refresh_data"),
         ("Z", "zoom", "zoom_cycle"), ("X", "fit", "zoom_fit"),
         ("G", "lights", "lights_next"), ("S", "sleep", "sleep"),
-        ("P", "Doom II", "doom2"), ("I J K L", "move view", None),
-        ("H", "close help", "toggle_help")]
+        ("P", "Doom II", "doom2"), ("E", "IR scope", "ir_scope"),
+        ("I J K L", "move view", None), ("H", "close help", "toggle_help")]
 NUMBERED = [a for _, _, a in KEYS if a]          # number key n runs NUMBERED[n - 1]
 BADGE = [("FN", "menu"), ("A", "zoom"), ("A hold", "runner view"), ("B", "back / Esc"),
          ("SELECT", "prev app"), ("START", "app list"), ("D-pad", "move view"), ("FN+B", "info"),
