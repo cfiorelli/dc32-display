@@ -49,6 +49,10 @@ class View(unittest.TestCase):
         self.assertEqual(src.freq, S.PRESETS[1][1])
         v.key('audio')
         self.assertEqual(src.audio_mode, 'WFM')
+        v.key('preset')                                     # listening: an ISM band switches to AM
+        self.assertEqual((src.freq, src.audio_mode), (S.PRESETS[2][1], 'AM'))
+        src.snapshot = lambda: (np.full(S.NBINS, -60.0), None, [])   # retune race: no peak hold yet
+        self.assertEqual(v.render().shape, (240, 320, 3))
         self.assertEqual(v.render().shape, (240, 320, 3))
         none = SimpleNamespace(freq=1e8, status='no SDR', error='no device', snapshot=lambda: (None, None, []))
         self.assertEqual(V.SdrView(none).render().shape, (240, 320, 3))
