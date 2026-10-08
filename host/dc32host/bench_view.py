@@ -31,7 +31,7 @@ class Bench:
     def __init__(self):
         self.freq = BANDS[0]
         self.state = "idle"            # idle | armed | captured | replaying | pass | fail | error
-        self.msg = "A: arm   START: replay+verify   hold A: self-test"
+        self.msg = "idle — arm to capture a Sub-GHz signal"
         self.orig = None               # rfbench.Decoded
         self.replay = None
         self.expect = None             # self-test key (hex)
@@ -125,6 +125,7 @@ class Bench:
 class BenchView:
     def __init__(self, bench: Bench):
         self.b = bench
+        self.kb_here = False      # set by the daemon each frame: is the PC keyboard grabbed for the bench?
         self.f, self.f_s, self.f_b, self.f_big = _ttf(12), _ttf(11), _ttf(12, bold=True), _ttf(15, bold=True)
 
     def _frame(self, d, pulses, y, h, col):
@@ -164,5 +165,10 @@ class BenchView:
                 d.text((8, 146 + 14 * (i // 36)), " ".join(bits[j:j + 4] for j in range(i, min(i + 36, len(bits)), 4)),
                        font=self.f_s, fill=INK2)
         d.text((8, 190), b.msg[:52], font=self.f, fill=colour)
-        d.text((8, 222), "A arm  START verify  hold A self-test  </> band", font=self.f_s, fill=MUTED)
+        # control hint: badge buttons always work; the PC keyboard works only after Ctrl+Alt+Y
+        if getattr(self, "kb_here", False):
+            hint = "Enter=arm  Space=verify  Sh+Enter=test  <>=band"
+        else:
+            hint = "badge: A arm  START verify  A-hold test   Ctrl+Alt+Y"
+        d.text((8, 222), hint, font=self.f_s, fill=MUTED)
         return np.asarray(img).copy()

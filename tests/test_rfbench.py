@@ -74,5 +74,26 @@ class View(unittest.TestCase):
         self.assertEqual(b.freq, 315.0e6)
 
 
+
+    def test_hint_states_and_no_duplicate(self):
+        from unittest.mock import patch
+        from PIL import ImageDraw
+        from dc32host import bench_view as BV
+        b = BV.Bench(); v = BV.BenchView(b)
+        def texts(kb):
+            v.kb_here = kb; seen = []
+            orig = ImageDraw.ImageDraw.text
+            def rec(self, xy, t, *a, **k):
+                seen.append(t); return orig(self, xy, t, *a, **k)
+            with patch.object(ImageDraw.ImageDraw, 'text', rec):
+                v.render()
+            return seen
+        pc = texts(False)
+        self.assertTrue(any('Ctrl+Alt+Y' in t for t in pc))
+        self.assertTrue(any(t.startswith('idle') for t in pc))              # status line, not a hint repeat
+        self.assertFalse(any('A arm' in t and 'START' in t for t in [b.msg]))  # default msg no longer = hint
+        here = texts(True)
+        self.assertTrue(any('Enter=arm' in t for t in here))
+
 if __name__ == '__main__':
     unittest.main()
