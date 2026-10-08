@@ -5,7 +5,7 @@ import numpy as np
 from PIL import Image, ImageDraw
 
 from . import capture as C
-from .runner_view import BG, INK, INK2, MUTED, GRID, OK, _ttf
+from .runner_view import BG, INK, INK2, MUTED, GRID, OK, _ttf, kb_pill
 from .sdr import RATE, NBINS, PRESETS, STEPS
 
 W, H = C.OUT_W, C.OUT_H
@@ -39,6 +39,7 @@ class SdrView:
     def __init__(self, src):
         self.src = src
         self.step_i = 1
+        self.kb_here = False
         self.preset_i = 0
         self.f, self.f_s, self.f_b = _ttf(12), _ttf(11), _ttf(13, bold=True)
 
@@ -79,8 +80,9 @@ class SdrView:
         d.text((4, 3), mhz(f0), font=self.f_b, fill=INK)
         if getattr(self.src, "audio_mode", None):
             d.text((4 + d.textlength(mhz(f0), font=self.f_b) + 8, 5), "♪ " + self.src.audio_mode, font=self.f_s, fill=OK)
-        info = f"step {STEPS[self.step_i] / 1e3:g} kHz   span 2.0 MHz"
-        d.text((W - 4 - d.textlength(info, font=self.f_s), 5), info, font=self.f_s, fill=INK2)
+        pill_left = kb_pill(d, self.kb_here)
+        info = f"step {STEPS[self.step_i] / 1e3:g} kHz"
+        d.text((pill_left - 8 - d.textlength(info, font=self.f_s), 7), info, font=self.f_s, fill=INK2)
         d.line([0, SPEC_Y1 + 1, W, SPEC_Y1 + 1], fill=GRID)
         d.line([W // 2, SPEC_Y0, W // 2, SPEC_Y1], fill=GRID)          # centre marker
         if spec is not None:
