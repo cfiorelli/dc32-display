@@ -54,7 +54,7 @@ class FlipperView:
 
         if live:
             if self.kb_here:
-                hint = "arrows/OK/Back only · Ctrl+Alt+Y releases keyboard"
+                hint = "arrows  Enter=OK  Bksp=Back    Ctrl+Alt+Y: release"
             else:
                 hint = "D-pad  A=OK  B=Back    Ctrl+Alt+Y: keyboard here"
             d.text((6, 226), hint, font=self.f_s, fill=MUTED)
