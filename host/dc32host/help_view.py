@@ -13,8 +13,8 @@ KEYS = [("B", "runner view", "toggle_runner"), ("R", "refresh data", "refresh_da
         ("Z", "zoom", "zoom_cycle"), ("X", "fit", "zoom_fit"),
         ("G", "lights", "lights_next"), ("S", "sleep", "sleep"),
         ("P", "Doom II", "doom2"), ("E", "IR scope", "ir_scope"),
-        ("F", "Flipper Zero", "flipper"), ("I J K L", "move view", None),
-        ("H", "this help (Esc)", None)]
+        ("F", "Flipper Zero", "flipper"), ("W", "spectrum (SDR)", "sdr_view"),
+        ("I J K L", "move view", None), ("H", "this help (Esc)", None)]
 NUMBERED = [a for _, _, a in KEYS if a]          # number key n runs NUMBERED[n - 1]
 BADGE = [("FN", "menu"), ("A", "zoom"), ("A hold", "runner view"), ("B", "back / Esc"),
          ("SELECT", "prev app"), ("START", "app list"), ("D-pad", "move view"), ("FN+B", "info"),
@@ -31,20 +31,20 @@ def render() -> np.ndarray:
     d = ImageDraw.Draw(img)
     h, f, fb = _ttf(15, bold=True), _ttf(12), _ttf(12, bold=True)
     d.text((8, 4), "Keyboard: Ctrl+Alt+", font=h, fill=HOSTED)
-    hint = f"or just press 1-{len(NUMBERED)}"
+    hint = "or just press 1-9, 0"
     d.text((C.OUT_W - 8 - d.textlength(hint, font=f), 7), hint, font=f, fill=INK2)
     n = 0
     for i, (k, v, act) in enumerate(KEYS):
-        x, y = 8 + (i % 2) * 156, 25 + (i // 2) * 15
+        x, y = 8 + (i % 2) * 156, 24 + (i // 2) * 14
         if act:
             n += 1
-            d.text((x, y), str(n), font=fb, fill=HOSTED)
+            d.text((x, y), str(n % 10), font=fb, fill=HOSTED)
         d.text((x + 14, y), k, font=fb, fill=INK)
         d.text((x + 62, y), v, font=f, fill=INK2)
-    d.line([0, 102, C.OUT_W, 102], fill=GRID)
-    d.text((8, 105), "Badge buttons", font=h, fill=HOSTED)
+    d.line([0, 110, C.OUT_W, 110], fill=GRID)
+    d.text((8, 112), "Badge buttons", font=h, fill=HOSTED)
     for i, (k, v) in enumerate(BADGE):
-        x, y = 8 + (i % 2) * 156, 124 + (i // 2) * 19
+        x, y = 8 + (i % 2) * 156, 131 + (i // 2) * 18
         d.text((x, y), k, font=fb, fill=INK)
         d.text((x + 72, y), v, font=f, fill=INK2)
     d.text((8, 222), "Esc, B or Ctrl+Alt+H closes", font=f, fill=MUTED)
