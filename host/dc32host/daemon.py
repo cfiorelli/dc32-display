@@ -790,6 +790,8 @@ class Daemon:
         now = time.time()
         if cur:
             if self.cursor_last[0] != (cur[0], cur[1]):
+                if self.cursor_last[0] is not None:
+                    self.mouse_takes_over(now)
                 self.cursor_last = ((cur[0], cur[1]), now)
         typing = now < self.typing_until
         key_recent = now - self.last_key_t < 0.5    # changes this soon after a key are its echo
@@ -811,6 +813,12 @@ class Daemon:
             else:
                 C.draw_edge_marker(out, cx, cy)
         return t_cap, out, changed_src
+
+    def mouse_takes_over(self, now):
+        """Latest input wins: moving the mouse ends a keyboard/D-pad pan hold (was 15 s) and the
+        after-typing hold (3 s), so the view follows the pointer again right away."""
+        self.vp.manual_until = 0.0
+        self.typing_until = min(self.typing_until, now)
 
     def apply_zoom(self, src_wi):
         """Effective zoom = per-app zoom (e.g. Badge Terminal 1:1) > typing zoom > the user's choice."""

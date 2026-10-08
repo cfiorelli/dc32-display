@@ -4,6 +4,7 @@ from pathlib import Path
 import sys
 import tempfile
 import threading
+import time
 import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -123,6 +124,18 @@ class MouseCamera(unittest.TestCase):
     def frame(self, pt, mouse=True):
         self.vp.compose(self.src, 'k', pt, mouse=mouse)
         return self.vp.center
+
+    def test_mouse_moves_after_keyboard_pan(self):
+        self.vp.pan(1, 0)                                  # I/J/K/L: holds the view for 15 s
+        held = self.frame((1300, 500))
+        self.assertEqual(held, self.vp.center)             # pointer ignored while held
+        from dc32host import daemon as D
+        d = D.Daemon.__new__(D.Daemon)
+        d.vp, d.typing_until = self.vp, time.time() + 3
+        d.mouse_takes_over(time.time())                    # the mouse moved: it wins
+        xs = [self.frame((1300, 500))[0] for _ in range(10)]
+        self.assertGreater(xs[-1], held[0])                # view follows the pointer again
+        self.assertLessEqual(d.typing_until, time.time())
 
     def test_small_moves_inside_margin_dont_move_view(self):
         for pt in ((700, 450), (900, 560), (720, 520)):
