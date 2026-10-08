@@ -420,7 +420,8 @@ class Daemon:
             self.set_view("mirror" if self.view == "sdr" else "sdr")
         elif name.startswith("skey:"):     # PC arrows / Enter while the spectrum is up
             if self.view == "sdr":
-                k = {"Up": "up", "Down": "down", "Left": "left", "Right": "right", "Return": "preset"}.get(name[5:])
+                k = {"Up": "up", "Down": "down", "Left": "left", "Right": "right", "Return": "preset",
+                     "Shift+Return": "audio"}.get(name[5:])
                 if k:
                     self._sdr()[1].key(k)
         elif name in ("flipper", "toggle_flipper"):   # Ctrl+Alt+F
@@ -542,7 +543,7 @@ class Daemon:
             self._sdr()[0].start()
             if hasattr(self.be, "grab_input"):
                 self.be.grab_input("sdr", ["Up", "Down", "Left", "Right", "Return"],
-                                   lambda e: self.ctl_q.put("skey:" + e))
+                                   lambda e: self.ctl_q.put("skey:" + e), shift=True)
         elif self.view == "sdr":
             self._sdr()[0].stop()
             if hasattr(self.be, "release_input"):
@@ -747,11 +748,13 @@ class Daemon:
                 return
         elif "fn" in ev.held:
             self.fn_used_as_modifier = True
-        if self.view == "sdr" and ev.button in ("up", "down", "left", "right", "a") and "fn" not in ev.held:
-            if ev.event in ("down", "repeat") and ev.button != "a":
+        if self.view == "sdr" and ev.button in ("up", "down", "left", "right", "a", "start") and "fn" not in ev.held:
+            if ev.event in ("down", "repeat") and ev.button not in ("a", "start"):
                 self._sdr()[1].key(ev.button)
             elif ev.event == "short" and ev.button == "a":
                 self._sdr()[1].key("preset")
+            elif ev.event == "short" and ev.button == "start":
+                self._sdr()[1].key("audio")
             return
         if self.view == "flipper" and ev.button != "fn" and "fn" not in ev.held:
             key = {"up": "up", "down": "down", "left": "left", "right": "right", "a": "ok", "b": "back",
