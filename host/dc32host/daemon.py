@@ -918,6 +918,7 @@ class Daemon:
         if self.view == "sdr":
             return time.time(), self._sdr()[1].render(), False
         if self.view == "bench":
+            self._bench()[1].kb_here = getattr(self, "kb_focus", None) == "bench"
             return time.time(), self._bench()[1].render(), False
         src_wi = self.pick_source()
         changed_src = (src_wi.handle if src_wi else None) != (self.shown.handle if self.shown else None)
@@ -1031,7 +1032,7 @@ class Daemon:
                 f"capture->badge {s['c2a_ms']:.0f} ms (p95 {s['c2a_p95']:.0f})  rtt {s['rtt_ms']:.0f}",
                 f"fw {info.fw if info else '?'}  host {__version__}",
             ], where="top")
-        if getattr(self, "kb_focus", None) and self.view != "flipper":   # flipper view has its own pill
+        if getattr(self, "kb_focus", None) and self.view not in ("flipper", "bench"):   # these label it themselves
             import numpy as np
             from PIL import Image, ImageDraw
             pil = Image.fromarray(out)
