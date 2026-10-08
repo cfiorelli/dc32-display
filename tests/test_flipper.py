@@ -107,7 +107,7 @@ class KeyboardIndicator(unittest.TestCase):
         self.assertTrue(any('Ctrl+Alt+Y: keyboard here' in t for t in pc))
         here = self.texts(True)
         self.assertIn('keys: HERE', here)
-        self.assertTrue(any('no typing' not in t and 'releases keyboard' in t for t in here))
+        self.assertTrue(any('Enter=OK' in t and 'Bksp=Back' in t for t in here))
 
 
 if __name__ == '__main__':
