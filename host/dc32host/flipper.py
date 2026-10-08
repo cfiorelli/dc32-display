@@ -161,6 +161,7 @@ class FlipperLink:
             if self._fd is not None:
                 try:
                     os.write(self._fd, main_msg(self._cid + 1, 21))     # stop screen stream
+                    os.write(self._fd, main_msg(self._cid + 2, 19))     # stop_session: back to the CLI
                 except OSError:
                     pass
                 os.close(self._fd)
@@ -224,7 +225,7 @@ class FlipperLink:
                             # older firmware: firmware_version; newer property format: firmware.version
                             k = kv[1].decode(errors="replace").replace(".", "_")
                             self.info[k] = (kv.get(2) or b"").decode(errors="replace")
-                            if k == "firmware_version":
+                            if k == "firmware_origin_git":           # one of the last keys sent
                                 log.info("flipper firmware %s (%d info keys)", self.firmware(), len(self.info))
                     if num == 22 and isinstance(v, bytes):
                         for n2, d in fields(v):
