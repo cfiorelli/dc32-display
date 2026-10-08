@@ -51,6 +51,23 @@ class View(unittest.TestCase):
         self.assertEqual(link.presses, [('ok', False), ('back', True), ('back', False)])
         self.assertEqual(d.actions, [])                        # B didn't leave the view
 
+    def test_pc_keys_and_mouse(self):
+        presses = []
+        link = SimpleNamespace(press=lambda k, long=False: presses.append((k, long)))
+        d = D.Daemon.__new__(D.Daemon)
+        d.view, d.flipper = 'flipper', (link, None)
+        for e in ('Up', 'Return', 'Shift+BackSpace', 'button4', 'button3', 'button1', 'F1'):
+            D.Daemon.action(d, 'fkey:' + e)
+        self.assertEqual(presses, [('up', False), ('ok', False), ('back', True), ('up', False),
+                                   ('back', False), ('ok', False)])
+        d.view = 'mirror'
+        D.Daemon.action(d, 'fkey:Up')                          # view closed: ignored
+        self.assertEqual(len(presses), 6)
+
+    def test_firmware_label(self):
+        link = SimpleNamespace(info={'firmware_origin_fork': 'Momentum', 'firmware_version': 'mntm-009'})
+        self.assertEqual(F.FlipperLink.firmware(link), 'Momentum mntm-009')
+
 
 if __name__ == '__main__':
     unittest.main()

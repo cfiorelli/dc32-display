@@ -26,6 +26,7 @@ class Backend:
         if not os.environ.get("DISPLAY"):
             raise RuntimeError("no X11 DISPLAY")
         self.d = display.Display()
+        self._grabs = {}
         self.root = self.d.screen().root
         a = self.d.intern_atom
         self.A = {n: a(n) for n in ("_NET_CLIENT_LIST_STACKING", "_NET_CLIENT_LIST", "_NET_ACTIVE_WINDOW",
@@ -155,28 +156,34 @@ class Backend:
         xss.XScreenSaverQueryInfo(dpy, root, info)
         return int(info.contents.idle)
 
-    def grab_help_keys(self, on_key):
-        """Grab 1-9 and Escape (any CapsLock/NumLock state) on the root window until release_help_keys(),
-        so the cheat sheet's numbers work without any focus. Own X connection, own thread."""
-        if getattr(self, "_help_grab", None):
+    def grab_input(self, name, keys, on_event, buttons=(), shift=False):
+        """Passively grab `keys` (keysym names) and mouse `buttons` on the root window, in any
+        CapsLock/NumLock state (and with Shift if `shift`), until release_input(name). on_event gets
+        the keysym name ('Shift+Up' when shifted) or 'button3'. Own X connection and thread; X drops
+        the grabs by itself if the daemon dies, so nothing can stay stuck."""
+        if name in self._grabs:
             return
         from Xlib import X as XC, XK, display
         from Xlib.error import CatchError
         dpy = display.Display()
         root = dpy.screen().root
         codes = {}
-        for name in [str(i) for i in range(1, 10)] + ["Escape"]:
-            kc = dpy.keysym_to_keycode(XK.string_to_keysym(name))
+        for k in keys:
+            kc = dpy.keysym_to_keycode(XK.string_to_keysym(k))
             if kc:
-                codes[kc] = name
-        mods = [0, XC.LockMask, XC.Mod2Mask, XC.LockMask | XC.Mod2Mask]
+                codes[kc] = k
+        locks = [0, XC.LockMask, XC.Mod2Mask, XC.LockMask | XC.Mod2Mask]
+        mods = locks + ([m | XC.ShiftMask for m in locks] if shift else [])
         err = CatchError()
         for kc in codes:
             for m in mods:
                 root.grab_key(kc, m, True, XC.GrabModeAsync, XC.GrabModeAsync, onerror=err)
+        for b in buttons:
+            root.grab_button(b, XC.AnyModifier, True, XC.ButtonPressMask, XC.GrabModeAsync,
+                             XC.GrabModeAsync, XC.NONE, XC.NONE, onerror=err)
         dpy.sync()
         if err.get_error():
-            log.warning("help keys: some keys are grabbed by another program (%s)", err.get_error())
+            log.warning("%s: some keys/buttons are grabbed by another program (%s)", name, err.get_error())
         stop = threading.Event()
 
         def loop():
@@ -184,22 +191,32 @@ class Backend:
                 while dpy.pending_events():
                     ev = dpy.next_event()
                     if ev.type == XC.KeyPress and ev.detail in codes:
-                        on_key(codes[ev.detail])
-                stop.wait(0.03)
+                        on_event(("Shift+" if ev.state & XC.ShiftMask else "") + codes[ev.detail])
+                    elif ev.type == XC.ButtonPress:
+                        on_event(f"button{ev.detail}")
+                stop.wait(0.02)
             for kc in codes:
                 for m in mods:
                     root.ungrab_key(kc, m)
+            for b in buttons:
+                root.ungrab_button(b, XC.AnyModifier)
             dpy.sync()
             dpy.close()
 
-        threading.Thread(target=loop, daemon=True, name="help-keys").start()
-        self._help_grab = stop
+        threading.Thread(target=loop, daemon=True, name=f"grab-{name}").start()
+        self._grabs[name] = stop
 
-    def release_help_keys(self):
-        stop = getattr(self, "_help_grab", None)
+    def release_input(self, name):
+        stop = self._grabs.pop(name, None)
         if stop:
             stop.set()
-            self._help_grab = None
+
+    def grab_help_keys(self, on_key):
+        """Cheat sheet: 1-9 run the numbered shortcuts, Esc closes."""
+        self.grab_input("help", [str(i) for i in range(1, 10)] + ["Escape"], on_key)
+
+    def release_help_keys(self):
+        self.release_input("help")
 
     def input_mark(self):
         import time

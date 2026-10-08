@@ -42,7 +42,8 @@ DEFAULTS = {
     "sd_writable": False,             # microSD as a USB drive: read-only unless enabled (ctl sd_rw / sd_ro)
     "lights_mode": "off",             # off | bright | wave | rainbow | rave | runner  (Ctrl+Alt+G cycles)
     "show_cursor": True,
-    "mouse_moves_view": True,         # zoomed in: pushing the pointer near an edge glides the view (False: keys/D-pad only)
+    "mouse_moves_view": True,
+    "flipper_mouse": True,            # Flipper view: mouse wheel/clicks go to the Flipper (keyboard always does)         # zoomed in: pushing the pointer near an edge glides the view (False: keys/D-pad only)
     "cursor_only_when_moving_s": 3.0, # hide the cursor overlay this long after it stops (0 = always)
     "letterbox_color": [0, 0, 0],
     "long_press_ms": 600,
