@@ -721,7 +721,8 @@ class Daemon:
             self.on_menu_result(ev)
         elif isinstance(ev, P.IrFrame):
             self._ir().add(ev.pairs)
-            log.info("IR frame: %d pulses, %s", len(ev.pairs), self._ir().frames[-1][2] or "unknown")
+            log.info("IR frame: %d pulses, %s  [%s ...]", len(ev.pairs), self._ir().frames[-1][2] or "unknown",
+                     " ".join(f"{m}/{s}" for m, s in ev.pairs[:6]))
         elif isinstance(ev, P.TapEvent):
             self.on_tap(ev)
         elif isinstance(ev, P.DeviceError):
