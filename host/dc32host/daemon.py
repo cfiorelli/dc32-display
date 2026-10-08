@@ -28,7 +28,8 @@ def E_black_frame(d):
     return b"".join(E.encode_frame(cur, None, d.stats.kinds)) + P.frame_end(d.frame_id)
 
 
-TAP_QUIET_S = 0.8     # gap that separates two physical taps (each rings as a burst of events)
+TAP_BURST_GAP = 0.2   # events closer than this are one knock ringing (measured: <= 0.1 s apart)
+KNOCK_WINDOW = (0.3, 1.0)   # knock-knock: the second knock starts this long after the first
 RESYNC_GAP_S = 2.5    # firmware HOST_TIMEOUT_MS is 3000: past this the badge may have blanked
 ZOOM_CYCLE = ["fit", "2x", "1x"]
 FAV_ID_BASE = 0x80000000
@@ -127,6 +128,7 @@ class Daemon:
         self.sleeping = False
         self.sleep_t = 0.0
         self._tap_last = 0.0
+        self._knock_t = 0.0
         self._dim_check = 0.0
 
     # ================================================================ local control (keyboard shortcuts)
@@ -180,17 +182,22 @@ class Daemon:
         log.info("wake (%s) after %d min", why, (time.time() - self.sleep_t) // 60)
 
     def on_tap(self, ev):
-        """A tap toggles sleep. One physical tap rings for up to ~0.5 s and arrives as a burst of tap
-        events, so a new tap only counts after TAP_QUIET_S without any (the chip's double-tap flag
-        can't be trusted for the same reason)."""
+        """Knock-knock toggles sleep: two knocks on the badge 0.3-1 s apart. A single knock is ignored,
+        because a knock on the PC case reaches the badge almost as hard as a tap on it (measured
+        2026-10-08: case 1.6-2.9 g vs badge 1.9-3.9 g peak-to-peak), but bumps come one at a time.
+        Each knock rings as a burst of tap events; events < TAP_BURST_GAP apart are the same knock."""
         now = time.time()
-        quiet = now - self._tap_last
+        new_knock = now - self._tap_last > TAP_BURST_GAP
         self._tap_last = now
-        log.info("tap x%d", ev.count)
-        if not self.cfg.get("tap_sleep", True) or quiet < TAP_QUIET_S:
+        log.info("tap x%d%s", ev.count, " (knock)" if new_knock else "")
+        if not self.cfg.get("tap_sleep", True) or not new_knock:
             return
+        prev, self._knock_t = self._knock_t, now
+        if not KNOCK_WINDOW[0] <= now - prev <= KNOCK_WINDOW[1]:
+            return
+        self._knock_t = 0.0                             # consumed: a third knock starts a new pair
         if self.sleeping:
-            self.wake("tap")
+            self.wake("knock-knock")
         else:
             self.sleep()
 
