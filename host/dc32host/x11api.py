@@ -251,5 +251,7 @@ class Backend:
         else:
             args = list(cmd)
         log.info("launching: %s", args)
-        subprocess.Popen(args, cwd=cwd, start_new_session=True)
+        p = subprocess.Popen(args, cwd=cwd, start_new_session=True)
+        # reap it when it exits, or every launched app (Doom, terminals) lingers as a zombie
+        threading.Thread(target=p.wait, daemon=True, name="reap").start()
         return True
