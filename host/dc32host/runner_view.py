@@ -36,6 +36,28 @@ SELF = (217, 89, 38)
 OK, WARN, BAD = (46, 160, 67), (201, 133, 0), (210, 60, 60)
 
 
+_KB_ORANGE = (255, 140, 41)
+_KB_GREY = (60, 60, 58)
+
+
+def kb_pill(d, kb_here, right=None, y=6, font=None):
+    """Consistent keyboard-capture indicator, top-right of a view: orange 'keys: HERE' when the badge
+    has grabbed the PC keyboard, grey 'keys: PC' otherwise. Returns the pill's left x (so the view can
+    keep its own text clear of it)."""
+    from PIL import ImageFont
+    if right is None:
+        right = C.OUT_W - 6
+    if font is None:
+        font = _ttf(12, bold=True)
+    text = "keys: HERE" if kb_here else "keys: PC"
+    bg, fg = (_KB_ORANGE, (0, 0, 0)) if kb_here else (_KB_GREY, (195, 194, 183))
+    w = d.textlength(text, font=font)
+    x0 = right - w - 12
+    d.rounded_rectangle([x0, y, right, y + 18], radius=4, fill=bg)
+    d.text((x0 + 6, y + 2), text, font=font, fill=fg)
+    return x0
+
+
 def _ttf(size, bold=False):
     for p in (f"/usr/share/fonts/truetype/dejavu/DejaVuSans{'-Bold' if bold else ''}.ttf",
               "C:/Windows/Fonts/segoeuib.ttf" if bold else "C:/Windows/Fonts/segoeui.ttf"):
