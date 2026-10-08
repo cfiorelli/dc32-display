@@ -405,6 +405,8 @@ class Daemon:
                 self.set_view(self.prev_view if self.prev_view != "help" else "mirror")
             if act and act != "toggle_help":
                 self.action(act)
+        elif name in ("ir_scope", "toggle_ir"):   # Ctrl+Alt+E
+            self.set_view("mirror" if self.view == "ir" else "ir")
         elif name == "refresh_data":       # Ctrl+Alt+R: fetch GitHub runner data now
             self._runner().data.refresh_now()
             self.say("Updating runner data")
@@ -516,6 +518,8 @@ class Daemon:
     def set_view(self, view):
         if view == "help" and self.view != "help":
             self.prev_view = self.view
+        if (view == "ir") != (self.view == "ir"):
+            self.send(P.set_ir(view == "ir"))     # the IR receiver only runs while the scope is open
         self.view = view
         if view == "help" and hasattr(self.be, "grab_help_keys"):
             self.be.grab_help_keys(lambda k: self.ctl_q.put("helpkey:" + k))
@@ -524,10 +528,17 @@ class Daemon:
         if view == "runner":
             self._runner()                 # starts the background fetch on first use
         if view != "help":
-            self.say({"mirror": "Mirroring screen", "runner": "Runner costs", "paused": "Display paused"}[view],
+            self.say({"mirror": "Mirroring screen", "runner": "Runner costs", "paused": "Display paused",
+                      "ir": "IR scope"}[view],
                      *(["FN: menu"] if view != "mirror" else []))
         self.vp.reset()
         self.force_refresh()
+
+    def _ir(self):
+        if getattr(self, "ir", None) is None:
+            from .ir_view import IrScope
+            self.ir = IrScope()
+        return self.ir
 
     def _runner(self):
         if self.runner is None:
@@ -576,6 +587,7 @@ class Daemon:
             ("Resume display" if self.view == "paused" else "Pause display", "toggle_pause", self.view == "paused"),
             (f"Lights: {self.lights.mode} (Ctrl+Alt+G)", "lights_next", self.lights.mode != "off"),
             ("Shortcuts (Ctrl+Alt+H)", "toggle_help", self.view == "help"),
+            ("IR scope (Ctrl+Alt+E)", "ir_scope", self.view == "ir"),
             ("Sleep: screen off (Ctrl+Alt+S)", "sleep", False),
             ("Status info", "info", False),
         ]
@@ -707,6 +719,9 @@ class Daemon:
             self.on_button(ev)
         elif isinstance(ev, P.MenuResult):
             self.on_menu_result(ev)
+        elif isinstance(ev, P.IrFrame):
+            self._ir().add(ev.pairs)
+            log.info("IR frame: %d pulses, %s", len(ev.pairs), self._ir().frames[-1][2] or "unknown")
         elif isinstance(ev, P.TapEvent):
             self.on_tap(ev)
         elif isinstance(ev, P.DeviceError):
@@ -753,6 +768,8 @@ class Daemon:
         if self.view == "help":
             from . import help_view
             return time.time(), help_view.render(), False
+        if self.view == "ir":
+            return time.time(), self._ir().render(), False
         src_wi = self.pick_source()
         changed_src = (src_wi.handle if src_wi else None) != (self.shown.handle if self.shown else None)
         if changed_src:
@@ -974,7 +991,8 @@ class Daemon:
         self._leds_last = None
         self.send(P.set_brightness(self.brightness) + P.set_timing(int(self.cfg.get("long_press_ms", 600)), 400, 90)
                   + P.set_tap(int(self.cfg.get("tap_threshold", 12)) if self.cfg.get("tap_sleep", True) else 0)
-                  + P.set_sd_write(bool(self.cfg.get("sd_writable", False))))
+                  + P.set_sd_write(bool(self.cfg.get("sd_writable", False)))
+                  + P.set_ir(self.view == "ir"))
         self.say(f"DC32 Display host {__version__}", f"fw {self.badge.info.fw}")
 
     def run(self, once_seconds: float | None = None):
