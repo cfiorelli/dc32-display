@@ -18,6 +18,15 @@ BADGE_TERMINAL = {
     "zoom": "1x",
 }
 
+# Doom II (or Freedoom 2) in a 320x240 window, mirrored 1:1. Installed by tools/install_doom.sh.
+DOOM2 = {
+    "name": "Doom II",
+    "match": {"title": "Chocolate Doom", "process": None, "cmdline": None},
+    "launch": {"cmd": ["{doom2}"], "cwd": None, "title": "Doom II", "terminal": False},
+    "zoom": "1x",
+}
+BUILTIN_FAVORITES = [BADGE_TERMINAL, DOOM2]   # found by name even when config.json lists its own favorites
+
 DEFAULTS = {
     "version": 2,
     "mode": "follow",                 # follow | pinned | desktop
