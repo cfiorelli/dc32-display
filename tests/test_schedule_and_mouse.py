@@ -43,6 +43,13 @@ class Schedule(unittest.TestCase):
         self.d.fetching = False
         self.assertIsNone(view.schedule_text({'backfill': (1, 5)}, now))
 
+    def test_age_color(self):
+        now = dt.datetime(2026, 10, 8, 12, tzinfo=dt.timezone.utc)
+        ago = lambda m: now - dt.timedelta(minutes=m)
+        self.assertEqual([rv.age_color(ago(m), now) for m in (4, 14, 16, 119, 121)],
+                         [rv.OK, rv.OK, rv.WARN, rv.WARN, rv.BAD])
+        self.assertEqual(rv.age_color(None, now), rv.MUTED)
+
     def test_cycle_days_left(self):
         utc = dt.timezone.utc
         self.assertEqual(rv.cycle_days_left(dt.datetime(2026, 10, 8, 11, 0, tzinfo=utc)), 24)

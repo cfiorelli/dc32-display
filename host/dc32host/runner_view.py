@@ -1,7 +1,7 @@
 """Native 320x240 runner status, seven local days, month share and billed budget.
 
 The configured dashboard module owns collection and accounting. GitHub refreshes every
-2 hours by default and not at all during quiet hours (22:00-07:00 local; B-hold forces one);
+5 minutes by default and not at all during quiet hours (23:00-03:00 local; Ctrl+Alt+R forces one);
 the local systemd/journald probe runs every 10 seconds.
 """
 from __future__ import annotations
@@ -54,7 +54,7 @@ def load_dashboard_module(path: str):
 class RunnerData:
     """Background fetcher. `snapshot()` never blocks on the network."""
 
-    def __init__(self, script: str, refresh_s: int = 7200, local_s: int = 10, quiet_hours=(22, 7)):
+    def __init__(self, script: str, refresh_s: int = 300, local_s: int = 10, quiet_hours=(23, 3)):
         self.script, self.refresh_s, self.local_s = script, refresh_s, local_s
         self.quiet_hours = tuple(quiet_hours) if quiet_hours else None   # (start, end) local hours
         self.fetching = False
@@ -313,7 +313,7 @@ class RunnerView:
             return BAD, "NO ACCESS"        # token can't read a configured repo/billing: fix the token, not wait
         expected = getattr(self.data, "fetching", False) or (
             hasattr(self.data, "quiet_now") and self.data.quiet_now(now.timestamp()))
-        too_old = age is not None and age > 2 * self.data.refresh_s and not expected
+        too_old = age is not None and age > max(2 * self.data.refresh_s, 1800) and not expected
         if (err or wrong_month or backfill[0] < backfill[1] or age is None or too_old or
                 not v or "days7" not in v or "month_min" not in v or not units):
             return BAD, "STALE " + (_ago(age) if age is not None else "?")
@@ -354,7 +354,7 @@ class RunnerView:
         d.text((28, 4), name, font=self.f_big, fill=INK)
         nx = 28 + d.textlength(name, font=self.f_big) + 8
         d.text((nx, 6), word, font=self.f_b, fill=color)
-        d.text((mx, 8), right, font=self.f_s, fill=INK2)
+        d.text((mx, 8), right, font=self.f_s, fill=age_color(updated, now))
         d.line([0, 30, W, 30], fill=GRID)
 
         # Week: two adjacent bars per day on one shared minute scale.
@@ -441,6 +441,14 @@ class RunnerView:
         if data.quiet_hours and data.next_at > t and (data.quiet_now(t) or data.quiet_now(data.next_at)):
             return None                  # overnight pause: "Last update" in the header says enough
         return "next " + _ago(max(0.0, data.next_at - t))
+
+
+def age_color(updated, now):
+    """One glance: green = fresh (< 15 min), amber = aging (< 2 h), red = old, grey = never."""
+    if not updated:
+        return MUTED
+    age = (now - _utc(updated)).total_seconds()
+    return OK if age < 900 else WARN if age < 7200 else BAD
 
 
 def cycle_days_left(now):

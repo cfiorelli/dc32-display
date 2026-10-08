@@ -70,6 +70,24 @@ class Sleep(unittest.TestCase):
         self.assertEqual(states, [True, False, True, False, True, False])   # 6 taps, 6 toggles
         self.assertEqual(P.parse(P.TAP, bytes([2])), P.TapEvent(2))
 
+    def test_help_number_keys(self):
+        from dc32host.help_view import NUMBERED, KEYS
+        self.assertEqual(NUMBERED[:2], ['toggle_runner', 'refresh_data'])
+        self.assertEqual(len(NUMBERED), sum(1 for k in KEYS if k[2]))
+        d = stub([0.0])
+        views = []
+        d.view, d.prev_view = 'help', 'mirror'
+        d.set_view = lambda v: (views.append(v), setattr(d, 'view', v))
+        D.Daemon.action(d, 'helpkey:2')               # 2 = refresh data: closes help, then runs it
+        self.assertEqual((views, d.actions), (['mirror'], ['refresh_data']))
+        d.view = 'help'
+        D.Daemon.action(d, 'helpkey:9')               # no such number: help stays up
+        self.assertEqual(d.view, 'help')
+        D.Daemon.action(d, 'helpkey:Escape')
+        self.assertEqual(d.view, 'mirror')
+        D.Daemon.action(d, 'helpkey:1')               # help not open any more: ignored
+        self.assertEqual(d.actions, ['refresh_data'])
+
     def test_manual_brightness_never_reaches_off(self):
         d = stub([0.0])
         d.brightness, d.say = 2, lambda *a, **k: None

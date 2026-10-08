@@ -393,6 +393,19 @@ class Daemon:
             self.set_view("mirror" if (name == "toggle_runner" and self.view == "runner") else "runner")
         elif name in ("view_mirror", "resume"):
             self.set_view("mirror")
+        elif name.startswith("helpkey:"):  # a number (or Esc) pressed while the cheat sheet is up
+            if self.view != "help":
+                return
+            from .help_view import NUMBERED
+            key = name[8:]
+            act = NUMBERED[int(key) - 1] if key.isdigit() and 0 < int(key) <= len(NUMBERED) else None
+            if key == "Escape" or act:
+                self.set_view(self.prev_view if self.prev_view != "help" else "mirror")
+            if act and act != "toggle_help":
+                self.action(act)
+        elif name == "refresh_data":       # Ctrl+Alt+R: fetch GitHub runner data now
+            self._runner().data.refresh_now()
+            self.say("Updating runner data")
         elif name in ("help", "toggle_help"):
             self.set_view(self.prev_view if self.view == "help" else "help")
         elif name in ("lights_next", "lights_cycle"):
@@ -496,6 +509,10 @@ class Daemon:
         if view == "help" and self.view != "help":
             self.prev_view = self.view
         self.view = view
+        if view == "help" and hasattr(self.be, "grab_help_keys"):
+            self.be.grab_help_keys(lambda k: self.ctl_q.put("helpkey:" + k))
+        elif hasattr(self.be, "release_help_keys"):
+            self.be.release_help_keys()
         if view == "runner":
             self._runner()                 # starts the background fetch on first use
         if view != "help":
@@ -509,8 +526,8 @@ class Daemon:
             from .runner_view import RunnerData, RunnerView
             rv = self.cfg.get("runner_view") or {}
             script = rv.get("script") or self._dashboard_script()
-            data = RunnerData(script, int(rv.get("refresh_s", 7200)),
-                              quiet_hours=rv.get("quiet_hours", [22, 7]))
+            data = RunnerData(script, int(rv.get("refresh_s", 300)),
+                              quiet_hours=rv.get("quiet_hours", [23, 3]))
             data.start()
             self.runner = RunnerView(data)
         return self.runner
