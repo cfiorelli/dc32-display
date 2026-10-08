@@ -56,8 +56,8 @@ class SdrView:
             self.preset_i = (self.preset_i + 1) % len(PRESETS)
             name, f, mode = PRESETS[self.preset_i]
             self.src.tune(f)
-            if self.src.audio_mode is not None or mode is None:   # keep listening if already on
-                self.src.set_audio(mode)
+            if self.src.audio_mode is not None:      # listening: follow the band (ISM on/off keying -> AM)
+                self.src.set_audio(mode or "AM")
         elif k == "audio":
             from .sdr_audio import MODES
             self.src.set_audio(MODES[(MODES.index(self.src.audio_mode) + 1) % len(MODES)])
@@ -84,6 +84,8 @@ class SdrView:
         d.line([0, SPEC_Y1 + 1, W, SPEC_Y1 + 1], fill=GRID)
         d.line([W // 2, SPEC_Y0, W // 2, SPEC_Y1], fill=GRID)          # centre marker
         if spec is not None:
+            if peak is None:                         # just retuned: peak hold restarts
+                peak = spec
             lo, hi = float(np.percentile(spec, 10)) - 3, float(max(peak.max(), spec.max())) + 3
             ys = lambda s: SPEC_Y1 - (np.clip((to_cols(s) - lo) / (hi - lo), 0, 1) * (SPEC_Y1 - SPEC_Y0)).astype(int)
             d.line(list(zip(range(W), ys(peak).tolist())), fill=MUTED)
