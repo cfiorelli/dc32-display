@@ -7,6 +7,7 @@ Retuning is a request the thread applies between reads. Needs pyrtlsdr < 0.3 (Ub
 from __future__ import annotations
 
 import logging
+import queue
 import threading
 import time
 
@@ -78,26 +79,57 @@ class SdrSource:
         if self._demod:
             self._player.write(self._demod.process(x))
 
+    def _open(self):
+        """Open the dongle and start async streaming into self._q (a reader thread in librtlsdr).
+        Async matters: blocking reads with work in between dropped ~1/3 of the samples (audio skips)."""
+        from rtlsdr import RtlSdr
+        dev = RtlSdr()
+        dev.sample_rate = RATE
+        dev.gain = self.gain
+        dev.center_freq = self.freq + OFFSET
+        self._q = queue.Queue(maxsize=32)
+
+        def cb(x, ctx):
+            try:
+                self._q.put_nowait(x)
+            except queue.Full:                               # consumer stalled: drop, never block USB
+                self.dropped += 1
+
+        def reader():
+            try:
+                dev.read_samples_async(cb, 64 * 1024)
+            except Exception as e:
+                log.warning("sdr stream ended: %s", e)
+            self._q.put(None)                               # wake the consumer
+        threading.Thread(target=reader, daemon=True, name="sdr-usb").start()
+        return dev
+
+    def _close(self, dev):
+        try:
+            dev.cancel_read_async()
+            time.sleep(0.1)
+            dev.close()
+        except Exception:
+            pass
+
     def _loop(self):
         dev = None
+        self.dropped = 0
         while True:
             if not self._want:
                 if self._player:
                     self._player.close()
                     self._demod = self._player = None
                 if dev is not None:
-                    dev.close()
+                    self._close(dev)
                     dev = None
                     self.status = "idle"
                 time.sleep(0.2)
                 continue
             if dev is None:
                 try:
-                    from rtlsdr import RtlSdr
-                    dev = RtlSdr()
-                    dev.sample_rate = RATE
-                    dev.gain = self.gain
-                    self._retune = True
+                    dev = self._open()
+                    self._retune = False
                     self.status, self.error = "running", None
                 except Exception as e:                       # no dongle / busy / library
                     self.status, self.error = "no SDR", str(e)[:60]
@@ -107,14 +139,14 @@ class SdrSource:
                 if self._retune:
                     self._retune = False
                     dev.center_freq = self.freq + OFFSET
-                    dev.read_samples(16 * 1024)              # settle after the PLL retunes
-                x = dev.read_samples(64 * 1024)
+                    for _ in range(2):                       # let the PLL settle: skip ~64 ms of samples
+                        self._q.get(timeout=2)
+                x = self._q.get(timeout=2)
+                if x is None:
+                    raise IOError("stream stopped")
             except Exception as e:
                 log.warning("sdr read failed: %s", e)
-                try:
-                    dev.close()
-                except Exception:
-                    pass
+                self._close(dev)
                 dev = None
                 self.status, self.error = "SDR lost", str(e)[:60]
                 time.sleep(1)
