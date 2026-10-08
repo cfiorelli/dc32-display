@@ -37,11 +37,17 @@ class Schedule(unittest.TestCase):
         self.d.next_at = at(15, 42)
         self.assertEqual(view.schedule_text(v, now), 'next 1h42')
         self.d.next_at = at(23)
-        self.assertEqual(view.schedule_text(v, now), 'paused till 7:00')
+        self.assertIsNone(view.schedule_text(v, now))      # overnight: no footer text
         self.d.fetching = True
         self.assertEqual(view.schedule_text(v, now), 'updating...')
         self.d.fetching = False
         self.assertIsNone(view.schedule_text({'backfill': (1, 5)}, now))
+
+    def test_cycle_days_left(self):
+        utc = dt.timezone.utc
+        self.assertEqual(rv.cycle_days_left(dt.datetime(2026, 10, 8, 11, 0, tzinfo=utc)), 24)
+        self.assertEqual(rv.cycle_days_left(dt.datetime(2026, 10, 31, 23, 0, tzinfo=utc)), 1)
+        self.assertEqual(rv.cycle_days_left(dt.datetime(2026, 12, 15, tzinfo=utc)), 17)
 
     def test_old_data_is_not_stale_overnight(self):
         view = rv.RunnerView(self.d)
