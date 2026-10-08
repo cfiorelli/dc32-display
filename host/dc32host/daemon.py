@@ -429,6 +429,32 @@ class Daemon:
                 return
             self.set_keyboard(not getattr(self, "kb_focus", None))
             self.say("Keyboard -> badge (Ctrl+Alt+Y: back to PC)" if self.kb_focus else "Keyboard -> PC")
+        elif name in ("command_menu", "toggle_cmd"):   # Ctrl+Alt+M: every action, keyboard-driven
+            if self.view == "cmd":
+                self.set_view(self.prev_view if self.prev_view != "cmd" else "mirror")
+            else:
+                self._cmd().sel = 0
+                self.prev_view = self.view
+                self.set_view("cmd")
+        elif name.startswith("cmdkey:"):
+            if self.view != "cmd":
+                return
+            key = name[7:]
+            if key == "Up":
+                self._cmd().move(-1)
+            elif key == "Down":
+                self._cmd().move(1)
+            elif key == "Home":
+                self._cmd().move(-9999)
+            elif key == "End":
+                self._cmd().move(9999)
+            elif key == "Escape":
+                self.set_view(self.prev_view if self.prev_view != "cmd" else "mirror")
+            elif key == "Return":
+                act = self._cmd().action()
+                self.action(act)
+                if self.view == "cmd":           # an adjust action (brightness/lights/zoom): stay open
+                    self.force_refresh()
         elif name in ("rf_bench", "toggle_bench"):   # Ctrl+Alt+V: capture / decode / replay / verify
             self.set_view("mirror" if self.view == "bench" else "bench")
         elif name.startswith("bkey:"):
@@ -584,9 +610,15 @@ class Daemon:
             self.be.grab_help_keys(lambda k: self.ctl_q.put("helpkey:" + k))
         elif hasattr(self.be, "release_help_keys"):
             self.be.release_help_keys()
+        if hasattr(self.be, "grab_input"):
+            if view == "cmd":
+                self.be.grab_input("cmd", ["Up", "Down", "Return", "Escape", "Home", "End"],
+                                   lambda e: self.ctl_q.put("cmdkey:" + e))
+            else:
+                self.be.release_input("cmd")
         if view == "runner":
             self._runner()                 # starts the background fetch on first use
-        if view != "help":
+        if view not in ("help", "cmd"):
             self.say({"mirror": "Mirroring screen", "runner": "Runner costs", "paused": "Display paused",
                       "ir": "IR scope", "flipper": "Flipper", "sdr": "Spectrum (SDR)",
                       "bench": "RF bench"}[view],
@@ -642,6 +674,12 @@ class Daemon:
             src = SdrSource(freq=float(self.cfg.get("sdr_freq", 433.92e6)))
             self.sdr = (src, SdrView(src))
         return self.sdr
+
+    def _cmd(self):
+        if getattr(self, "cmd", None) is None:
+            from .command_view import CommandView
+            self.cmd = CommandView()
+        return self.cmd
 
     def _ir(self):
         if getattr(self, "ir", None) is None:
@@ -912,6 +950,8 @@ class Daemon:
             return time.time(), help_view.render(getattr(self, "help_page", 0)), False
         if self.view == "ir":
             return time.time(), self._ir().render(), False
+        if self.view == "cmd":
+            return time.time(), self._cmd().render(), False
         if self.view == "flipper":
             self._flipper()[1].kb_here = getattr(self, "kb_focus", None) == "flipper"
             return time.time(), self._flipper()[1].render(), False
