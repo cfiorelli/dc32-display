@@ -213,7 +213,7 @@ class Backend:
 
     def grab_help_keys(self, on_key):
         """Cheat sheet: 1-9 run the numbered shortcuts, Esc closes."""
-        self.grab_input("help", [str(i) for i in range(1, 10)] + ["Escape"], on_key)
+        self.grab_input("help", [str(i) for i in range(10)] + ["Escape"], on_key)
 
     def release_help_keys(self):
         self.release_input("help")
