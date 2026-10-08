@@ -35,6 +35,9 @@ class FlipperView:
         else:
             d.rectangle([X0, Y0, X0 + SW - 1, Y0 + SH - 1], outline=GRID)
             d.text((12, Y0 + SH // 2 - 8), self.link.status[:46], font=self.f_s, fill=INK2)
-        if self.input_hint and live:
-            d.text((8, 214), self.input_hint, font=self.f_s, fill=MUTED)
+        if live:
+            # always say how to drive it: the PC keyboard reaches the Flipper only after Ctrl+Alt+Y,
+            # and even then only its 6 buttons (arrows/OK/Back) - no letters, so no typing into apps.
+            hint = self.input_hint or "D-pad move  A=OK  B=Back    Ctrl+Alt+Y=keyboard"
+            d.text((6, 226), hint, font=self.f_s, fill=MUTED)
         return np.asarray(img).copy()
