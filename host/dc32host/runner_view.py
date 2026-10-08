@@ -342,15 +342,19 @@ class RunnerView:
                if units and units[0].get("unit", "").count(".") >= 3 else "runner")
         color, word = self.status(v, loc, err, updated, now)
 
-        # Header: preserve the status and month even for a long runtime runner name.
-        month = now.astimezone().strftime("%b")
-        mx = W - 8 - d.textlength(month, font=self.f)
+        # Header: status, plus how old the GitHub numbers are (a long runner name gets truncated).
+        age = _ago((now - _utc(updated)).total_seconds()) + " ago" if updated else "—"
+        room = W - 8 - 28 - d.textlength(word, font=self.f_b) - 16 - d.textlength(name, font=self.f_big)
+        right = "Last update " + age
+        if d.textlength(right, font=self.f_s) > room:
+            right = age                  # keep the runner name whole; drop the prefix
+        mx = W - 8 - d.textlength(right, font=self.f_s)
         name = _fit(d, name, self.f_big, mx - 28 - d.textlength(word, font=self.f_b) - 16)
         d.ellipse([8, 9, 20, 21], fill=color)
         d.text((28, 4), name, font=self.f_big, fill=INK)
         nx = 28 + d.textlength(name, font=self.f_big) + 8
         d.text((nx, 6), word, font=self.f_b, fill=color)
-        d.text((mx, 6), month, font=self.f, fill=INK2)
+        d.text((mx, 8), right, font=self.f_s, fill=INK2)
         d.line([0, 30, W, 30], fill=GRID)
 
         # Week: two adjacent bars per day on one shared minute scale.
@@ -400,19 +404,20 @@ class RunnerView:
         d.line([0, 180, W, 180], fill=GRID)
 
         # Footer, two compact lines:
-        #   $12.34 saved  30 days, est.        what self-hosted minutes would have cost on GitHub
-        #   $0.00 of $250 budget    next 1h42  actual billed Actions spend this month
+        #   $12.34 saved, rolling 30d              what self-hosted minutes would have cost on GitHub
+        #   $0.00 of $250, resets 24d  next 28m    billed Actions spend this cycle (GitHub blue)
         saved = (v or {}).get("saved30")
         x = 8
         if saved is not None:
             amt = _money(saved)
             d.text((x, 186), amt, font=self.f_mid, fill=SELF)
-            d.text((x + d.textlength(amt, font=self.f_mid) + 6, 191), "saved  30 days, est.", font=self.f_s, fill=INK2)
+            d.text((x + d.textlength(amt, font=self.f_mid) + 6, 191), "saved, rolling 30d", font=self.f_s, fill=INK2)
         amount = _money(v.get("actions_net", 0)) if v and same_month and v.get("billing_ok", True) else "$—"
         budget = (v or {}).get("budget")
-        label = f"of ${budget['amount']:,.0f} budget" if budget else "spent, no budget set"
+        label = (f"of ${budget['amount']:,.0f}, resets {cycle_days_left(now)}d" if budget
+                 else f"spent, resets {cycle_days_left(now)}d")
         y = 212 if saved is not None else 196
-        d.text((x, y), amount, font=self.f_mid, fill=INK)
+        d.text((x, y), amount, font=self.f_mid, fill=HOSTED)
         lx = x + d.textlength(amount, font=self.f_mid) + 6
         d.text((lx, y + 4), label, font=self.f_s, fill=INK2)
         sched = self.schedule_text(v, now)
@@ -423,7 +428,7 @@ class RunnerView:
         return np.asarray(img).copy()
 
     def schedule_text(self, v, now):
-        """When the GitHub numbers next change: 'updating...', 'next 1h42', 'paused till 7:00'."""
+        """When the GitHub numbers next change: 'updating...' or 'next 28m' (nothing overnight)."""
         data = self.data
         if not v or not hasattr(data, "next_at"):
             return None
@@ -434,8 +439,15 @@ class RunnerView:
             return None                  # header already says SYNC n%
         t = now.timestamp()
         if data.quiet_hours and data.next_at > t and (data.quiet_now(t) or data.quiet_now(data.next_at)):
-            return f"paused till {data.quiet_hours[1]}:00"
+            return None                  # overnight pause: "Last update" in the header says enough
         return "next " + _ago(max(0.0, data.next_at - t))
+
+
+def cycle_days_left(now):
+    """Days until GitHub's metered billing cycle (calendar month, UTC) and its budget reset."""
+    u = _utc(now) or dt.datetime.now(dt.timezone.utc)
+    nxt = dt.datetime(u.year + (u.month == 12), u.month % 12 + 1, 1, tzinfo=dt.timezone.utc)
+    return max(1, -(-int((nxt - u).total_seconds()) // 86400))
 
 
 def _fit(d, text, font, width):
