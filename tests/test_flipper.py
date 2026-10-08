@@ -68,6 +68,22 @@ class View(unittest.TestCase):
         link = SimpleNamespace(info={'firmware_origin_fork': 'Momentum', 'firmware_version': 'mntm-009'})
         self.assertEqual(F.FlipperLink.firmware(link), 'Momentum mntm-009')
 
+    def test_keyboard_only_when_handed_over(self):
+        calls = []
+        be = SimpleNamespace(grab_input=lambda n, k, cb, buttons=(), shift=False: calls.append(('grab', n, tuple(k))),
+                             release_input=lambda n: calls.append(('release', n)))
+        d = D.Daemon.__new__(D.Daemon)
+        d.be, d.cfg, d.view, d.kb_focus, d.toasts = be, {}, 'sdr', None, []
+        d.say = lambda *a, **k: d.toasts.append(a)
+        D.Daemon.action(d, 'keyboard')
+        self.assertEqual(calls, [('grab', 'badge-keys', ('Up', 'Down', 'Left', 'Right', 'Return'))])
+        self.assertEqual(d.kb_focus, 'sdr')
+        D.Daemon.action(d, 'keyboard')                          # Ctrl+Alt+Y again: back to the PC
+        self.assertEqual((calls[-1], d.kb_focus), (('release', 'badge-keys'), None))
+        d.view = 'mirror'
+        D.Daemon.action(d, 'keyboard')                          # nothing to control here
+        self.assertEqual(len(calls), 2)
+
 
 if __name__ == '__main__':
     unittest.main()
