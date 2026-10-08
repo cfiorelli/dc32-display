@@ -106,18 +106,18 @@ class RunnerViewTest(unittest.TestCase):
             self.assertEqual(104-(40+ys.min()),expected)
 
     def test_runtime_name_and_removed_content(self):
-        data=Snapshot('idle');data.fixture['v']['runner_api']['name']='replacement-runner'
+        data=Snapshot('idle');data.fixture['v']['runner_api']['name']='new-runner'
         texts=[];draw_text=rv.ImageDraw.ImageDraw.text
         def record(draw,xy,text,*a,**kw):
             texts.append(text);return draw_text(draw,xy,text,*a,**kw)
         with patch.object(rv.ImageDraw.ImageDraw,'text',record):
             view(data).render(now=data.fixture['now'])
-        self.assertTrue(any(t.startswith('replacement') for t in texts))
-        self.assertIn('Oct',texts)
+        self.assertIn('new-runner',texts)
+        self.assertTrue(any(t.endswith(' ago') for t in texts))            # 'Last update 5m ago' or '5m ago'
         self.assertIn('$24.62',texts)
-        self.assertIn('of $250 budget',texts)
+        self.assertTrue(any(t.startswith('of $250, resets ') for t in texts))
         # no savings line without a computed estimate
-        self.assertFalse(any(term in ' '.join(texts).lower() for term in ('saved','upd','12h','list price')))
+        self.assertFalse(any(term in ' '.join(texts).lower() for term in ('saved','12h','list price','paused')))
 
     def test_footer_savings_line_above_spend(self):
         data=Snapshot('idle');data.fixture['v']['saved30']=12.5
@@ -128,8 +128,8 @@ class RunnerViewTest(unittest.TestCase):
             view(data).render(now=data.fixture['now'])
         ys=dict(seen)
         self.assertLess(ys['$12.50'],ys['$24.62'])
-        self.assertIn('saved  30 days, est.',ys)
-        self.assertIn('of $250 budget',ys)
+        self.assertIn('saved, rolling 30d',ys)
+        self.assertTrue(any(k.startswith('of $250, resets ') for k in ys))
         self.assertTrue(all(y<=226 for _,y in seen))
 
     def test_errors_are_status_only_and_unknown_billing_is_not_zero(self):
