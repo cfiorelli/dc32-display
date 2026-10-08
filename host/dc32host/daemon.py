@@ -628,8 +628,7 @@ class Daemon:
             self.be.grab_input("badge-keys", keys, lambda e: self.ctl_q.put(prefix + e),
                                buttons=buttons, shift=True)
         if getattr(self, "flipper", None):
-            self.flipper[1].input_hint = (("keyboard + mouse" if self.cfg.get("flipper_mouse", True) else
-                                           "keyboard") + " drive the Flipper  -  Ctrl+Alt+Y to stop"
+            self.flipper[1].input_hint = ("arrows=move Enter=OK Bksp=Back (no typing)  Ctrl+Alt+Y: stop"
                                           if self.kb_focus == "flipper" else None)
 
     def _bench(self):
