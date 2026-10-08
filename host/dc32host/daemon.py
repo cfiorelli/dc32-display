@@ -405,6 +405,8 @@ class Daemon:
                 self.set_view(self.prev_view if self.prev_view != "help" else "mirror")
             if act and act != "toggle_help":
                 self.action(act)
+        elif name in ("flipper", "toggle_flipper"):   # Ctrl+Alt+F
+            self.set_view("mirror" if self.view == "flipper" else "flipper")
         elif name in ("ir_scope", "toggle_ir"):   # Ctrl+Alt+E
             self.set_view("mirror" if self.view == "ir" else "ir")
         elif name == "refresh_data":       # Ctrl+Alt+R: fetch GitHub runner data now
@@ -518,6 +520,10 @@ class Daemon:
     def set_view(self, view):
         if view == "help" and self.view != "help":
             self.prev_view = self.view
+        if view == "flipper":
+            self._flipper()[0].start()
+        elif self.view == "flipper":
+            self._flipper()[0].stop()
         if (view == "ir") != (self.view == "ir"):
             self.send(P.set_ir(view == "ir"))     # the IR receiver only runs while the scope is open
         self.view = view
@@ -529,10 +535,18 @@ class Daemon:
             self._runner()                 # starts the background fetch on first use
         if view != "help":
             self.say({"mirror": "Mirroring screen", "runner": "Runner costs", "paused": "Display paused",
-                      "ir": "IR scope"}[view],
+                      "ir": "IR scope", "flipper": "Flipper"}[view],
                      *(["FN: menu"] if view != "mirror" else []))
         self.vp.reset()
         self.force_refresh()
+
+    def _flipper(self):
+        if getattr(self, "flipper", None) is None:
+            from .flipper import FlipperLink
+            from .flipper_view import FlipperView
+            link = FlipperLink()
+            self.flipper = (link, FlipperView(link))
+        return self.flipper
 
     def _ir(self):
         if getattr(self, "ir", None) is None:
@@ -588,6 +602,7 @@ class Daemon:
             (f"Lights: {self.lights.mode} (Ctrl+Alt+G)", "lights_next", self.lights.mode != "off"),
             ("Shortcuts (Ctrl+Alt+H)", "toggle_help", self.view == "help"),
             ("IR scope (Ctrl+Alt+E)", "ir_scope", self.view == "ir"),
+            ("Flipper Zero (Ctrl+Alt+F)", "flipper", self.view == "flipper"),
             ("Sleep: screen off (Ctrl+Alt+S)", "sleep", False),
             ("Status info", "info", False),
         ]
@@ -675,6 +690,14 @@ class Daemon:
                 return
         elif "fn" in ev.held:
             self.fn_used_as_modifier = True
+        if self.view == "flipper" and ev.button != "fn" and "fn" not in ev.held:
+            key = {"up": "up", "down": "down", "left": "left", "right": "right", "a": "ok", "b": "back",
+                   "select": "back", "start": "ok"}.get(ev.button)
+            if key and ev.event in ("short", "long"):
+                self._flipper()[0].press(key, long=ev.event == "long")
+            elif key and ev.event == "repeat" and key in ("up", "down", "left", "right"):
+                self._flipper()[0].press(key)
+            return
         if self.view == "help" and ev.button == "b" and ev.event == "short":
             self.set_view(self.prev_view)
             return
@@ -771,6 +794,8 @@ class Daemon:
             return time.time(), help_view.render(), False
         if self.view == "ir":
             return time.time(), self._ir().render(), False
+        if self.view == "flipper":
+            return time.time(), self._flipper()[1].render(), False
         src_wi = self.pick_source()
         changed_src = (src_wi.handle if src_wi else None) != (self.shown.handle if self.shown else None)
         if changed_src:
