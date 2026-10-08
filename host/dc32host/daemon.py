@@ -416,6 +416,12 @@ class Daemon:
                    else self.FLIPPER_KEYS.get(ev))
             if key:
                 self._flipper()[0].press(key, long=long)
+        elif name in ("keyboard", "toggle_keyboard"):   # Ctrl+Alt+Y: keyboard -> badge view and back
+            if self.view not in self.KEYBOARD_VIEWS:
+                self.say("No keyboard controls here")
+                return
+            self.set_keyboard(not getattr(self, "kb_focus", None))
+            self.say("Keyboard -> badge (Ctrl+Alt+Y: back to PC)" if self.kb_focus else "Keyboard -> PC")
         elif name in ("rf_bench", "toggle_bench"):   # Ctrl+Alt+V: capture / decode / replay / verify
             self.set_view("mirror" if self.view == "bench" else "bench")
         elif name.startswith("bkey:"):
@@ -546,26 +552,16 @@ class Daemon:
     def set_view(self, view):
         if view == "help" and self.view != "help":
             self.prev_view = self.view
-        if view == "bench" and hasattr(self.be, "grab_input"):
-            self.be.grab_input("bench", ["Return", "space", "Left", "Right"],
-                               lambda e: self.ctl_q.put("bkey:" + e), shift=True)
-        elif self.view == "bench" and hasattr(self.be, "release_input"):
-            self.be.release_input("bench")
+        if view != self.view:
+            self.set_keyboard(False)               # leaving a view always gives the keyboard back
         if view == "sdr":
             self._sdr()[0].start()
-            if hasattr(self.be, "grab_input"):
-                self.be.grab_input("sdr", ["Up", "Down", "Left", "Right", "Return"],
-                                   lambda e: self.ctl_q.put("skey:" + e), shift=True)
         elif self.view == "sdr":
             self._sdr()[0].stop()
-            if hasattr(self.be, "release_input"):
-                self.be.release_input("sdr")
         if view == "flipper":
             self._flipper()[0].start()
-            self.grab_flipper_input(True)
         elif self.view == "flipper":
             self._flipper()[0].stop()
-            self.grab_flipper_input(False)
         if (view == "ir") != (self.view == "ir"):
             self.send(P.set_ir(view == "ir"))     # the IR receiver only runs while the scope is open
         self.view = view
@@ -579,7 +575,8 @@ class Daemon:
             self.say({"mirror": "Mirroring screen", "runner": "Runner costs", "paused": "Display paused",
                       "ir": "IR scope", "flipper": "Flipper", "sdr": "Spectrum (SDR)",
                       "bench": "RF bench"}[view],
-                     *(["FN: menu"] if view != "mirror" else []))
+                     "Ctrl+Alt+Y: keyboard -> badge" if view in self.KEYBOARD_VIEWS
+                     else "FN: menu" if view != "mirror" else "")
         self.vp.reset()
         self.force_refresh()
 
@@ -595,20 +592,30 @@ class Daemon:
                     "KP_Enter": "ok", "space": "ok", "BackSpace": "back", "Escape": "back"}
     FLIPPER_BUTTONS = {1: "ok", 3: "back", 4: "up", 5: "down", 6: "left", 7: "right"}
 
-    def grab_flipper_input(self, on):
-        """While the Flipper view is up, the PC keyboard (arrows, Enter/Space, Backspace/Esc; Shift =
-        long press) and mouse (wheel = up/down, left = OK, right = Back) drive the Flipper. Ctrl+Alt+F
-        is never grabbed, so it always gets you out."""
-        if not hasattr(self.be, "grab_input"):
-            return
-        if not on:
-            self.be.release_input("flipper")
-            return
-        buttons = list(self.FLIPPER_BUTTONS) if self.cfg.get("flipper_mouse", True) else []
-        self.be.grab_input("flipper", list(self.FLIPPER_KEYS), lambda e: self.ctl_q.put("fkey:" + e),
-                           buttons=buttons, shift=True)
-        self._flipper()[1].input_hint = ("keyboard + mouse" if buttons else "keyboard") + \
-            " drive the Flipper  -  Ctrl+Alt+F to leave"
+    # view -> (keys grabbed while the keyboard is handed to the badge, event prefix, use mouse buttons)
+    KEYBOARD_VIEWS = {
+        "flipper": (list(FLIPPER_KEYS), "fkey:", True),
+        "sdr": (["Up", "Down", "Left", "Right", "Return"], "skey:", False),
+        "bench": (["Return", "space", "Left", "Right"], "bkey:", False),
+    }
+
+    def set_keyboard(self, on):
+        """Hand the PC keyboard (and for the Flipper, the mouse) to the current badge view, or give it
+        back. Off unless asked for (Ctrl+Alt+Y), off again on every view change, so typing elsewhere is
+        never swallowed. Ctrl+Alt shortcuts are never grabbed."""
+        on = bool(on) and self.view in self.KEYBOARD_VIEWS and hasattr(self.be, "grab_input")
+        if getattr(self, "kb_focus", None) and hasattr(self.be, "release_input"):
+            self.be.release_input("badge-keys")
+        self.kb_focus = self.view if on else None
+        if on:
+            keys, prefix, mouse = self.KEYBOARD_VIEWS[self.view]
+            buttons = list(self.FLIPPER_BUTTONS) if mouse and self.cfg.get("flipper_mouse", True) else []
+            self.be.grab_input("badge-keys", keys, lambda e: self.ctl_q.put(prefix + e),
+                               buttons=buttons, shift=True)
+        if getattr(self, "flipper", None):
+            self.flipper[1].input_hint = (("keyboard + mouse" if self.cfg.get("flipper_mouse", True) else
+                                           "keyboard") + " drive the Flipper  -  Ctrl+Alt+Y to stop"
+                                          if self.kb_focus == "flipper" else None)
 
     def _bench(self):
         if getattr(self, "bench", None) is None:
@@ -1007,6 +1014,14 @@ class Daemon:
                 f"capture->badge {s['c2a_ms']:.0f} ms (p95 {s['c2a_p95']:.0f})  rtt {s['rtt_ms']:.0f}",
                 f"fw {info.fw if info else '?'}  host {__version__}",
             ], where="top")
+        if getattr(self, "kb_focus", None):                  # small orange "KEYS" tab, top right
+            import numpy as np
+            from PIL import Image, ImageDraw
+            pil = Image.fromarray(out)
+            d = ImageDraw.Draw(pil)
+            d.rectangle([C.OUT_W - 40, 0, C.OUT_W - 1, 13], fill=(255, 140, 41))
+            d.text((C.OUT_W - 36, 1), "KEYS", font=C.font(), fill=(0, 0, 0))
+            out = np.asarray(pil).copy()
         if self.toast and now < self.toast[0]:
             out = C.draw_lines(out, self.toast[1])
         elif self.toast:
