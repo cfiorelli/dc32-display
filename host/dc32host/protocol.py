@@ -20,10 +20,12 @@ RECT_RAW, RECT_RLE, FILL, COPY, FRAME_END = 0x10, 0x11, 0x12, 0x13, 0x14
 MENU_LIST, MENU_CLOSE, SET_BRIGHTNESS, SET_TIMING, SET_LEDS = 0x20, 0x21, 0x22, 0x23, 0x24
 SET_TAP = 0x25
 SET_SD_WRITE = 0x26
+SET_IR = 0x27
 REBOOT = 0x7E
 # badge -> host
 INFO, BUTTON, ACK, MENU_RESULT, PONG, ERROR = 0x80, 0x81, 0x82, 0x83, 0x84, 0x8F
 TAP = 0x85
+IR_FRAME = 0x86
 
 BUTTONS = ["up", "down", "left", "right", "a", "b", "start", "select", "fn"]
 EVENTS = {1: "down", 2: "up", 3: "short", 4: "long", 5: "repeat"}
@@ -114,6 +116,11 @@ def set_sd_write(enable: bool) -> bytes:
     return msg(SET_SD_WRITE, bytes([1 if enable else 0]))
 
 
+def set_ir(on: bool) -> bytes:
+    """IR receiver on (IR scope) or off. fw >= 0.4."""
+    return msg(SET_IR, bytes([1 if on else 0]))
+
+
 def reboot(bootsel: bool) -> bytes:
     return msg(REBOOT, bytes([1 if bootsel else 0]) + b"BOOT")
 
@@ -162,6 +169,11 @@ class TapEvent:
 
 
 @dataclass
+class IrFrame:
+    pairs: list         # [(mark_us, space_us), ...]; the last space is 0
+
+
+@dataclass
 class DeviceError:
     code: int
     detail: int
@@ -181,6 +193,9 @@ def parse(mtype: int, p: bytes):
     if mtype == MENU_RESULT and len(p) >= 8:
         k, a, _, i = struct.unpack_from("<BBHI", p)
         return MenuResult(k, a, i)
+    if mtype == IR_FRAME and len(p) >= 1 and len(p) >= 1 + 4 * p[0]:
+        v = struct.unpack_from(f"<{2 * p[0]}H", p, 1)
+        return IrFrame(list(zip(v[0::2], v[1::2])))
     if mtype == TAP and len(p) >= 1:
         return TapEvent(p[0])
     if mtype == PONG and len(p) >= 4:
