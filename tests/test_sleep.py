@@ -88,21 +88,34 @@ class Sleep(unittest.TestCase):
 
     def test_help_number_keys(self):
         from dc32host.help_view import NUMBERED, KEYS
-        self.assertEqual(NUMBERED[:2], ['toggle_runner', 'refresh_data'])
-        self.assertEqual(len(NUMBERED), sum(1 for k in KEYS if k[2]))
+        self.assertEqual(NUMBERED[:2], ['toggle_runner', 'flipper'])
+        self.assertEqual(len(NUMBERED), len(KEYS))
         d = stub([0.0])
         views = []
         d.view, d.prev_view = 'help', 'mirror'
         d.set_view = lambda v: (views.append(v), setattr(d, 'view', v))
-        D.Daemon.action(d, 'helpkey:2')               # 2 = refresh data: closes help, then runs it
-        self.assertEqual((views, d.actions), (['mirror'], ['refresh_data']))
+        D.Daemon.action(d, 'helpkey:2')               # 2 = Flipper: closes help, then opens it
+        self.assertEqual((views, d.actions), (['mirror'], ['flipper']))
         d.view = 'help'
         D.Daemon.action(d, 'helpkey:x')               # not a number: help stays up
         self.assertEqual(d.view, 'help')
         D.Daemon.action(d, 'helpkey:Escape')
         self.assertEqual(d.view, 'mirror')
         D.Daemon.action(d, 'helpkey:1')               # help not open any more: ignored
-        self.assertEqual(d.actions, ['refresh_data'])
+        self.assertEqual(d.actions, ['flipper'])
+
+    def test_help_cycles_not_closes(self):
+        from dc32host.help_view import PAGES
+        d = stub([0.0])
+        d.view, d.prev_view, d.help_page = 'mirror', 'mirror', 0
+        d.set_view = lambda v: setattr(d, 'view', v)
+        d.force_refresh = lambda: None
+        D.Daemon.action(d, 'toggle_help')             # open
+        self.assertEqual((d.view, d.help_page), ('help', 0))
+        for expect in range(1, PAGES + 2):
+            D.Daemon.action(d, 'toggle_help')
+            self.assertEqual(d.view, 'help')          # H never closes
+            self.assertEqual(d.help_page, expect % PAGES)
 
     def test_manual_brightness_never_reaches_off(self):
         d = stub([0.0])
