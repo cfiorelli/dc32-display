@@ -33,6 +33,7 @@ COMMANDS = [
     ("Shortcuts / help", "toggle_help"),
     ("System monitor", "system"),
     ("Clock screensaver", "clock"),
+    ("Bubble level", "level"),
 ]
 ROWS = 9                               # visible rows
 
