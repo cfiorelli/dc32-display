@@ -50,6 +50,16 @@ class CommandView:
     def action(self):
         return COMMANDS[self.sel][1]
 
+    def jump(self, letter):
+        """Move to the next command whose label starts with `letter` (wrapping), for type-to-jump."""
+        letter = letter.lower()
+        order = list(range(self.sel + 1, len(COMMANDS))) + list(range(0, self.sel + 1))
+        for i in order:
+            if COMMANDS[i][0].lower().startswith(letter):
+                self.sel = i
+                return True
+        return False
+
     def render(self, now=None) -> np.ndarray:
         img = Image.new("RGB", (C.OUT_W, C.OUT_H), BG)
         d = ImageDraw.Draw(img)
@@ -66,5 +76,5 @@ class CommandView:
             if i == self.sel:
                 d.rectangle([4, y - 1, C.OUT_W - 4, y + rh - 3], fill=HOSTED)
             d.text((12, y), COMMANDS[i][0], font=self.f, fill=(0, 0, 0) if i == self.sel else INK)
-        d.text((8, 224), "↑↓ move   Enter run   Esc close   (Ctrl+Alt+M)", font=self.f_s, fill=MUTED)
+        d.text((8, 224), "↑↓ or type a letter · Enter run · Esc close", font=self.f_s, fill=MUTED)
         return np.asarray(img).copy()
