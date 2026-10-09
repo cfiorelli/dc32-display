@@ -55,6 +55,7 @@ DEFAULTS = {
     "exclude_titles": ["^Program Manager$", "^Windows Input Experience$", "^Settings$", "^NVIDIA GeForce Overlay$"],
     "exclude_processes": ["TextInputHost.exe", "ShellExperienceHost.exe", "SearchHost.exe", "StartMenuExperienceHost.exe"],
     "focus_alt_fallback": True,       # Windows: tap ALT if SetForegroundWindow is refused (foreground-lock workaround)
+    "runner_background": True,         # keep GitHub runner data fresh in the background (not only when viewing)
     "dashboard_favorite": "GitHub Runner Dashboard",
     "runner_view_for_dashboard": True, # show the badge-native runner view instead of the dashboard window
     # script: defaults to the dashboard favorite's .py. GitHub refresh every 5 min, none 23:00-03:00
