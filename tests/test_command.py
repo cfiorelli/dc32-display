@@ -51,5 +51,15 @@ class Nav(unittest.TestCase):
         self.assertEqual(d.cmd.sel, 0)
 
 
+
+    def test_jump_to_letter(self):
+        v = CV.CommandView()
+        self.assertTrue(v.jump('r'))                 # first R-command (Runner costs)
+        self.assertTrue(CV.COMMANDS[v.sel][0].lower().startswith('r'))
+        first = v.sel
+        v.jump('r')                                  # again -> next R-command (wraps through)
+        self.assertTrue(CV.COMMANDS[v.sel][0].lower().startswith('r'))
+        self.assertFalse(v.jump('q'))                # no command starts with q
+
 if __name__ == '__main__':
     unittest.main()

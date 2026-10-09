@@ -477,6 +477,9 @@ class Daemon:
                 self.action(act)
                 if self.view == "cmd":           # an adjust action (brightness/lights/zoom): stay open
                     self.force_refresh()
+            elif len(key) == 1 and key.isalpha():    # type-to-jump
+                self._cmd().jump(key)
+                self.force_refresh()
         elif name in ("rf_bench", "toggle_bench"):   # Ctrl+Alt+V: capture / decode / replay / verify
             self.set_view("mirror" if self.view == "bench" else "bench")
         elif name.startswith("bkey:"):
@@ -634,7 +637,8 @@ class Daemon:
             self.be.release_help_keys()
         if hasattr(self.be, "grab_input"):
             if view == "cmd":
-                self.be.grab_input("cmd", ["Up", "Down", "Return", "Escape", "Home", "End"],
+                self.be.grab_input("cmd", ["Up", "Down", "Return", "Escape", "Home", "End"]
+                                   + [chr(c) for c in range(ord("a"), ord("z") + 1)],
                                    lambda e: self.ctl_q.put("cmdkey:" + e))
             else:
                 self.be.release_input("cmd")
