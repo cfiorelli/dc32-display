@@ -73,14 +73,18 @@ class Sleep(unittest.TestCase):
             2630.094, 2630.152, 2630.154, 2630.179, 2646.254, 2646.306]
         self.assertEqual(self.run_taps(rec), [])
 
-    def test_knock_knock_toggles(self):
+    def test_knock_knock_sleeps_single_knock_wakes(self):
         ring = [0, 0.02, 0.05, 0.09, 0.15]                  # one knock's ringing events
         knock = lambda t: [t + r for r in ring]
-        seq = knock(100) + knock(100.5)                      # knock-knock: sleep
-        seq += knock(110) + knock(110.6) + knock(111.2)      # knock-knock (+ a stray third): wake
-        seq += knock(120) + knock(121.5)                     # too slow: nothing
-        self.assertEqual(self.run_taps(seq), [True, False])
+        seq = knock(100) + knock(100.5)                      # awake: knock-knock -> sleep
+        seq += knock(105)                                    # asleep: a single knock -> wake
+        seq += knock(110) + knock(110.6)                     # awake: knock-knock -> sleep
+        self.assertEqual(self.run_taps(seq), [True, False, True])
         self.assertEqual(P.parse(P.TAP, bytes([2])), P.TapEvent(2))
+
+    def test_single_knock_while_awake_does_nothing(self):
+        knock = lambda t: [t, t + 0.03, t + 0.1]
+        self.assertEqual(self.run_taps(knock(100) + knock(103) + knock(106)), [])   # 3 s apart: no sleep
 
     def test_help_number_keys(self):
         from dc32host.help_view import NUMBERED, KEYS

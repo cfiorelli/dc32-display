@@ -182,23 +182,24 @@ class Daemon:
         log.info("wake (%s) after %d min", why, (time.time() - self.sleep_t) // 60)
 
     def on_tap(self, ev):
-        """Knock-knock toggles sleep: two knocks on the badge 0.3-1 s apart. A single knock is ignored,
-        because a knock on the PC case reaches the badge almost as hard as a tap on it (measured
-        2026-10-08: case 1.6-2.9 g vs badge 1.9-3.9 g peak-to-peak), but bumps come one at a time.
+        """Taps on the badge. Asleep: any knock wakes it (an accidental wake just turns the screen on,
+        and PC input wakes it anyway). Awake: it takes a deliberate knock-knock (two knocks 0.3-1 s
+        apart) to sleep, so a single bump on the PC case - which reaches the badge almost as hard as a
+        real tap (measured 2026-10-08: case 1.6-2.9 g vs badge 1.9-3.9 g) - can't blank the screen.
         Each knock rings as a burst of tap events; events < TAP_BURST_GAP apart are the same knock."""
         now = time.time()
         new_knock = now - self._tap_last > TAP_BURST_GAP
         self._tap_last = now
-        log.info("tap x%d%s", ev.count, " (knock)" if new_knock else "")
         if not self.cfg.get("tap_sleep", True) or not new_knock:
             return
-        prev, self._knock_t = self._knock_t, now
-        if not KNOCK_WINDOW[0] <= now - prev <= KNOCK_WINDOW[1]:
+        log.info("tap (knock)%s", " while asleep" if self.sleeping else "")
+        if self.sleeping:                               # one knock wakes
+            self._knock_t = 0.0
+            self.wake("tap")
             return
-        self._knock_t = 0.0                             # consumed: a third knock starts a new pair
-        if self.sleeping:
-            self.wake("knock-knock")
-        else:
+        prev, self._knock_t = self._knock_t, now        # awake: knock-knock to sleep
+        if KNOCK_WINDOW[0] <= now - prev <= KNOCK_WINDOW[1]:
+            self._knock_t = 0.0
             self.sleep()
 
     def check_wake(self):
