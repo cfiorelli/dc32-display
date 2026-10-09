@@ -1,4 +1,4 @@
-"""Bubble level (Ctrl+Alt+O): a spirit level driven by the badge's accelerometer. The badge streams
+"""Level (Ctrl+Alt+O): a spirit level driven by the badge's accelerometer. The badge streams
 raw X/Y/Z; this shows a bubble that floats to the high side, target rings, the tilt angle, and a
 LEVEL indicator when it is flat. Hold the badge flat (screen up) to use it."""
 from __future__ import annotations
@@ -36,7 +36,7 @@ class LevelView:
         d = ImageDraw.Draw(img)
         live = time.time() - self.ts < 1.0
         d.ellipse([8, 9, 20, 21], fill=OK if live else MUTED)
-        d.text((28, 4), "Bubble level", font=self.f_big, fill=INK)
+        d.text((28, 4), "Level", font=self.f_big, fill=INK)
         d.line([0, 28, W, 28], fill=GRID)
 
         x, y, z = self.xyz
