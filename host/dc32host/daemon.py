@@ -459,6 +459,8 @@ class Daemon:
                 return
             self.set_keyboard(not getattr(self, "kb_focus", None))
             self.say("Keyboard -> badge (Ctrl+Alt+Y: back to PC)" if self.kb_focus else "Keyboard -> PC")
+        elif name in ("level", "toggle_level"):   # Ctrl+Alt+O: accelerometer bubble level
+            self.set_view("mirror" if self.view == "level" else "level")
         elif name in ("clock", "toggle_clock"):   # Ctrl+Alt+C: drifting clock screensaver
             self.set_view("mirror" if self.view == "clock" else "clock")
         elif name in ("system", "toggle_system"):   # Ctrl+Alt+U: live system monitor
@@ -642,6 +644,8 @@ class Daemon:
             self._flipper()[0].stop()
         if (view == "ir") != (self.view == "ir"):
             self.send(P.set_ir(view == "ir"))     # the IR receiver only runs while the scope is open
+        if (view == "level") != (self.view == "level"):
+            self.send(P.set_accel(view == "level"))   # stream the accelerometer only for the level
         self.view = view
         if view == "help" and hasattr(self.be, "grab_help_keys"):
             self.be.grab_help_keys(lambda k: self.ctl_q.put("helpkey:" + k))
@@ -659,7 +663,8 @@ class Daemon:
         if view not in ("help", "cmd"):
             self.say({"mirror": "Mirroring screen", "runner": "Runner costs", "paused": "Display paused",
                       "ir": "IR scope", "flipper": "Flipper", "sdr": "Spectrum (SDR)",
-                      "bench": "RF bench", "sys": "System monitor", "clock": "Clock"}[view],
+                      "bench": "RF bench", "sys": "System monitor", "clock": "Clock",
+                      "level": "Bubble level"}[view],
                      "Ctrl+Alt+Y: keyboard -> badge" if view in self.KEYBOARD_VIEWS
                      else "FN: menu" if view != "mirror" else "")
         self.vp.reset()
@@ -712,6 +717,12 @@ class Daemon:
             src = SdrSource(freq=float(self.cfg.get("sdr_freq", 433.92e6)))
             self.sdr = (src, SdrView(src))
         return self.sdr
+
+    def _level(self):
+        if getattr(self, "levelv", None) is None:
+            from .level_view import LevelView
+            self.levelv = LevelView()
+        return self.levelv
 
     def _clock(self):
         if getattr(self, "clockv", None) is None:
@@ -952,6 +963,9 @@ class Daemon:
             self._ir().add(ev.pairs)
             log.info("IR frame: %d pulses, %s  [%s ...]", len(ev.pairs), self._ir().frames[-1][2] or "unknown",
                      " ".join(f"{m}/{s}" for m, s in ev.pairs[:6]))
+        elif isinstance(ev, P.AccelEvent):
+            if getattr(self, "levelv", None) is not None:
+                self.levelv.update(ev.x, ev.y, ev.z)
         elif isinstance(ev, P.TapEvent):
             self.on_tap(ev)
         elif isinstance(ev, P.DeviceError):
@@ -1006,6 +1020,8 @@ class Daemon:
             return time.time(), self._sys().render(), False
         if self.view == "clock":
             return time.time(), self._clock().render(), False
+        if self.view == "level":
+            return time.time(), self._level().render(), False
         if self.view == "flipper":
             self._flipper()[1].kb_here = getattr(self, "kb_focus", None) == "flipper"
             return time.time(), self._flipper()[1].render(), False

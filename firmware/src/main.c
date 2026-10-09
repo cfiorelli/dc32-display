@@ -41,6 +41,7 @@ static bool s_screen_dirty = true;
 static uint32_t s_last_host_ms;
 static bool s_host_alive;
 static bool s_reset_req;
+static bool s_accel_stream;
 static uint32_t s_decode_us_acc;
 static uint32_t s_frames_acked;
 static uint16_t s_last_btn_drawn = 0xffff;
@@ -200,6 +201,9 @@ static void on_msg(decoder_t *d, uint8_t type, const uint8_t *p, uint32_t len)
     case DC32_MSG_SET_IR:
         if (len >= 1) ir_enable(p[0] != 0);
         break;
+    case DC32_MSG_SET_ACCEL:
+        if (len >= 1) s_accel_stream = p[0] != 0;
+        break;
     case DC32_MSG_SET_TAP:
         if (len >= 1) accel_set_tap_threshold(p[0]);
         break;
@@ -303,7 +307,7 @@ int main(void)
     // after USB + watchdog: a wedged I2C bus or missing accelerometer must never keep the badge off USB
     bool have_accel = accel_init();
     dbg("accelerometer %s", have_accel ? "ok" : "not found");
-    uint32_t last_tap_poll = 0;
+    uint32_t last_tap_poll = 0, last_accel = 0;
 
     static uint8_t rx[RX_CHUNK];
     uint32_t last_ui = 0, last_mount_ms = now_ms();
@@ -352,6 +356,15 @@ int main(void)
             last_tap_poll = now;
             uint8_t tap = accel_poll_tap();
             if (tap && s_host_alive) send_msg(DC32_MSG_TAP, &tap, 1);
+        }
+        if (have_accel && s_accel_stream && s_host_alive && now - last_accel >= 40) {
+            last_accel = now;
+            int16_t x, y, z;
+            if (accel_read_xyz(&x, &y, &z)) {
+                uint8_t ap[6];
+                wr16(ap, (uint16_t)x); wr16(ap + 2, (uint16_t)y); wr16(ap + 4, (uint16_t)z);
+                send_msg(DC32_MSG_ACCEL, ap, 6);
+            }
         }
 
         // IR scope: completed frames of marks/spaces
