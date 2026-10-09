@@ -13,9 +13,11 @@ import random
 
 N = 9
 FRONT, REAR = (0, 2, 4, 5, 6), (1, 3, 7, 8)
-MODES = ["off", "bright", "wave", "rainbow", "rave", "runner"]
-LABELS = {"off": "Lights off", "bright": "Lights: bright", "wave": "Lights: slow wave",
-          "rainbow": "Lights: rainbow", "rave": "Lights: rave", "runner": "Lights: runner status"}
+MODES = ["off", "bright", "breathe", "wave", "comet", "rainbow", "fire", "cpu", "police", "rave", "runner"]
+LABELS = {"off": "Lights off", "bright": "Lights: bright", "breathe": "Lights: breathe",
+          "wave": "Lights: slow wave", "comet": "Lights: comet", "rainbow": "Lights: rainbow",
+          "fire": "Lights: fire", "cpu": "Lights: CPU meter", "police": "Lights: police",
+          "rave": "Lights: rave", "runner": "Lights: runner status"}
 
 
 def _hsv(h, s, v):
@@ -32,6 +34,9 @@ class Lights:
         self.mode = mode if mode in MODES else "off"
         self._rave = [(0, 0, 0)] * N
         self._rave_t = 0.0
+        self._fire = [0.0] * N
+        self._cpu = 0.0
+        self._cpu_t = 0.0
 
     def next_mode(self):
         self.mode = MODES[(MODES.index(self.mode) + 1) % len(MODES)]
@@ -53,6 +58,37 @@ class Lights:
                 v = 0.15 + 0.55 * (0.5 + 0.5 * math.sin(2 * math.pi * (t / 6.0 - i / N)))
                 out.append(_hsv(0.55 + 0.08 * math.sin(t / 20.0) + i * 0.02, 0.8, v))
             return out
+        if m == "breathe":                                    # calm single-colour swell (cyan)
+            v = 0.08 + 0.55 * (0.5 - 0.5 * math.cos(2 * math.pi * t / 5.0))
+            return _all(_hsv(0.5, 0.85, v))
+        if m == "comet":                                      # bright head with a fading tail, orbiting
+            head = (t * 2.2) % N
+            out = []
+            for i in range(N):
+                d = min((i - head) % N, (head - i) % N)
+                out.append(_hsv(0.58 + 0.12 * math.sin(t / 7.0), 0.85, max(0.0, 1.0 - d * 0.42) ** 2))
+            return out
+        if m == "fire":                                       # per-LED flicker in the ember band
+            for i in range(N):
+                self._fire[i] = max(0.25, min(1.0, self._fire[i] + (random.random() - 0.5) * 0.5))
+            return [_hsv(0.00 + 0.10 * self._fire[i], 1.0, self._fire[i]) for i in range(N)]
+        if m == "cpu":                                        # live PC load as a green->red bar
+            if t - self._cpu_t > 0.5:
+                self._cpu_t = t
+                try:
+                    import psutil
+                    self._cpu = psutil.cpu_percent() / 100.0
+                except Exception:
+                    self._cpu = 0.0
+            lit = self._cpu * N
+            hue = 0.33 * (1.0 - min(1.0, self._cpu))          # green(low) -> red(high)
+            return [_hsv(hue, 1.0, 0.9) if i < int(lit) else
+                    _hsv(hue, 1.0, 0.9 * (lit - int(lit))) if i == int(lit) else (2, 2, 2)
+                    for i in range(N)]
+        if m == "police":                                     # red/blue halves swapping ~3 Hz
+            swap = int(t * 3) % 2
+            left, right = ((255, 0, 0), (0, 0, 255)) if swap == 0 else ((0, 0, 255), (255, 0, 0))
+            return [left if i < N // 2 else right for i in range(N)]
         if m == "rainbow":
             return [_hsv(t / 8.0 + i / N, 1.0, 0.8) for i in range(N)]
         if m == "rave":                                       # fast colour chase; no full-badge strobing
