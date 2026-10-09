@@ -1080,8 +1080,10 @@ class Daemon:
             elif (cur and now - self.cursor_last[1] < 1.0 and not typing     # typing beats the mouse
                   and self.cfg.get("mouse_moves_view", True)):
                 focus_pt, by_mouse = (cur[0] - rect[0], cur[1] - rect[1]), True
+        # only chase the typing caret (which jumps to the end of edits, e.g. while holding backspace)
+        # when typing-zoom is on; otherwise keep the view still and let keys/mouse pan it.
         out, tf = self.vp.compose(src, key, focus_pt, tuple(self.cfg.get("letterbox_color", [0, 0, 0])), key_recent,
-                                  mouse=by_mouse)
+                                  mouse=by_mouse, follow_activity=bool(self.cfg.get("typing_zoom")))
 
         hide_after = float(self.cfg.get("cursor_only_when_moving_s", 3.0))
         if self.cfg.get("show_cursor", True) and cur and cur[2] and (hide_after <= 0 or now - self.cursor_last[1] < hide_after):

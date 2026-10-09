@@ -208,7 +208,8 @@ class Viewport:
         self._prev_key = key
         return best
 
-    def compose(self, src: np.ndarray, key, focus_pt=None, letterbox=(0, 0, 0), typing=False, mouse=False):
+    def compose(self, src: np.ndarray, key, focus_pt=None, letterbox=(0, 0, 0), typing=False, mouse=False,
+                follow_activity=True):
         """src: RGB array of the source. focus_pt: preferred point (caret/mouse) in src coords.
         mouse=True: focus_pt is the pointer; glide just far enough to keep it inside a margin
         (a camera that gets pushed) instead of re-centring on it, which jumped and jittered.
@@ -234,7 +235,7 @@ class Viewport:
         if now >= self.manual_until:
             if focus_pt is not None:
                 target = focus_pt
-            elif bbox is not None:
+            elif bbox is not None and follow_activity:
                 bx0, by0, bx1, by1 = bbox
                 target = (bx1, by1 - 8)        # right end of the change: where the caret went
         if self.center is None:
