@@ -19,9 +19,11 @@ LEVEL_DEG = 1.0                      # within this tilt = "LEVEL"
 
 
 class LevelView:
-    def __init__(self):
+    def __init__(self, rotate=90, flip_x=False, flip_y=False):
         self.xyz = (0, 0, G)         # last raw sample (flat default)
         self.ts = 0.0
+        self.rotate = rotate % 360   # align the accel axes to the screen (badge mounting is rotated)
+        self.flip_x, self.flip_y = flip_x, flip_y
         self.f_big, self.f, self.f_s = _ttf(17, bold=True), _ttf(14), _ttf(11)
         self._sx = self._sy = 0.0    # smoothed g components
 
@@ -39,6 +41,13 @@ class LevelView:
 
         x, y, z = self.xyz
         gx, gy, gz = x / G, y / G, z / G
+        # rotate the in-plane vector to match the screen (the chip is mounted turned vs the display)
+        for _ in range((self.rotate // 90) % 4):
+            gx, gy = -gy, gx
+        if self.flip_x:
+            gx = -gx
+        if self.flip_y:
+            gy = -gy
         self._sx += 0.25 * (gx - self._sx)       # light smoothing
         self._sy += 0.25 * (gy - self._sy)
         # tilt angle from vertical; bubble floats to the high side (opposite the in-plane gravity)
