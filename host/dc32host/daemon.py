@@ -28,8 +28,8 @@ def E_black_frame(d):
     return b"".join(E.encode_frame(cur, None, d.stats.kinds)) + P.frame_end(d.frame_id)
 
 
-TAP_BURST_GAP = 0.2   # events closer than this are one knock ringing (measured: <= 0.1 s apart)
-KNOCK_WINDOW = (0.3, 1.0)   # knock-knock: the second knock starts this long after the first
+TAP_BURST_GAP = 0.18  # events closer than this are one knock ringing (measured: <= 0.1 s apart)
+KNOCK_WINDOW = (0.18, 1.0)  # knock-knock: the second knock starts this long after the first
 RESYNC_GAP_S = 2.5    # firmware HOST_TIMEOUT_MS is 3000: past this the badge may have blanked
 ZOOM_CYCLE = ["fit", "2x", "1x"]
 FAV_ID_BASE = 0x80000000
@@ -182,24 +182,23 @@ class Daemon:
         log.info("wake (%s) after %d min", why, (time.time() - self.sleep_t) // 60)
 
     def on_tap(self, ev):
-        """Taps on the badge. Asleep: any knock wakes it (an accidental wake just turns the screen on,
-        and PC input wakes it anyway). Awake: it takes a deliberate knock-knock (two knocks 0.3-1 s
-        apart) to sleep, so a single bump on the PC case - which reaches the badge almost as hard as a
-        real tap (measured 2026-10-08: case 1.6-2.9 g vs badge 1.9-3.9 g) - can't blank the screen.
-        Each knock rings as a burst of tap events; events < TAP_BURST_GAP apart are the same knock."""
+        """Knock-knock (two knocks KNOCK_WINDOW apart) toggles sleep both ways: wake if asleep, sleep
+        if awake. A single knock does nothing, so a lone bump on the PC case - which reaches the badge
+        almost as hard as a real tap (measured 2026-10-08: case 1.6-2.9 g vs badge 1.9-3.9 g) - can't
+        toggle it. Each knock rings as a burst; events < TAP_BURST_GAP apart are the same knock."""
         now = time.time()
         new_knock = now - self._tap_last > TAP_BURST_GAP
         self._tap_last = now
         if not self.cfg.get("tap_sleep", True) or not new_knock:
             return
-        log.info("tap (knock)%s", " while asleep" if self.sleeping else "")
-        if self.sleeping:                               # one knock wakes
-            self._knock_t = 0.0
-            self.wake("tap")
+        prev, self._knock_t = self._knock_t, now
+        if not KNOCK_WINDOW[0] <= now - prev <= KNOCK_WINDOW[1]:
+            log.info("tap (knock)")
             return
-        prev, self._knock_t = self._knock_t, now        # awake: knock-knock to sleep
-        if KNOCK_WINDOW[0] <= now - prev <= KNOCK_WINDOW[1]:
-            self._knock_t = 0.0
+        self._knock_t = 0.0                             # consumed: a third knock starts a new pair
+        if self.sleeping:
+            self.wake("knock-knock")
+        else:
             self.sleep()
 
     def check_wake(self):
