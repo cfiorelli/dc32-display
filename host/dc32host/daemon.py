@@ -119,6 +119,8 @@ class Daemon:
         self.last_key_t = 0.0
         self._in_mark = None
         self.ctl_q: queue.Queue = queue.Queue()
+        self._last_tx = 0.0
+        self._heartbeat_started = False
         from .lights import Lights
         self.lights = Lights(cfg.get("lights_mode", "off"))
         self._leds_last = None
@@ -132,6 +134,26 @@ class Daemon:
         self._dim_check = 0.0
 
     # ================================================================ local control (keyboard shortcuts)
+    def start_heartbeat(self):
+        """Keep-alive on its own thread: ping whenever nothing has been sent for ~0.8 s, so the badge
+        never hits its 3 s host timeout (and flickers to 'disconnected') while the main tick is briefly
+        starved - e.g. by heavy SDR FFTs or an RF-bench capture on a modest PC. device.write is locked,
+        so this interleaves safely at message boundaries."""
+        if self._heartbeat_started:
+            return
+        self._heartbeat_started = True
+        import threading
+
+        def loop():
+            while True:
+                time.sleep(0.4)
+                if self.badge.connected and time.time() - self._last_tx > 0.8:
+                    try:
+                        self.send(P.ping(int(time.time())))
+                    except Exception:
+                        pass
+        threading.Thread(target=loop, daemon=True, name="heartbeat").start()
+
     def start_control(self):
         """`dc32host ctl <action>` -> same actions as badge buttons (bind it to a desktop shortcut)."""
         path = control_socket_path()
@@ -1192,6 +1214,7 @@ class Daemon:
         t_end = time.time() + once_seconds if once_seconds else None
         if once_seconds is None:
             self.start_control()
+            self.start_heartbeat()
         waiting_logged = False
         while t_end is None or time.time() < t_end:
             if not self.badge.connected:
