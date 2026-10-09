@@ -113,6 +113,19 @@ void accel_self_test_pulse(void)
     wr(CTRL_REG4, 0x80);
 }
 
+bool accel_read_xyz(int16_t *x, int16_t *y, int16_t *z)
+{
+    if (!s_ok) return false;
+    uint8_t reg = 0x28 | 0x80;                    // OUT_X_L with auto-increment
+    uint8_t b[6];
+    if (i2c_write_timeout_us(I2C, ACCEL_I2C_ADDR, &reg, 1, true, 2000) != 1) return false;
+    if (i2c_read_timeout_us(I2C, ACCEL_I2C_ADDR, b, 6, false, 2000) != 6) return false;
+    *x = (int16_t)(b[0] | (b[1] << 8));           // left-justified; +-2 g full scale = +-32768
+    *y = (int16_t)(b[2] | (b[3] << 8));
+    *z = (int16_t)(b[4] | (b[5] << 8));
+    return true;
+}
+
 uint8_t accel_poll_tap(void)
 {
     uint8_t src;

@@ -35,6 +35,7 @@
 #define DC32_MSG_SET_SD_WRITE   0x26    // u8 1 = microSD writable over USB, 0 = read-only (default), fw >= 0.3
 #define DC32_MSG_SET_IR         0x27    // u8 1 = IR receiver on (IR scope), 0 = off (default), fw >= 0.4
 #define DC32_MSG_SET_TAP        0x25    // u8 threshold 0..127 (16 mg/LSB, 0 = taps off), fw >= 0.3
+#define DC32_MSG_SET_ACCEL      0x29    // u8 1 = stream accelerometer (bubble level), 0 = off, fw >= 0.4.1
 #define DC32_MSG_SET_TIMING     0x23    // u16 long_ms, u16 repeat_delay_ms, u16 repeat_ms, u16 idle_timeout_ms
 #define DC32_MSG_REBOOT         0x7E    // u8 kind(0=app,1=BOOTSEL) + "BOOT"
 
@@ -46,6 +47,7 @@
 #define DC32_MSG_PONG           0x84    // u32 token
 #define DC32_MSG_IR_FRAME       0x86    // u8 n + n * (u16 mark_us, u16 space_us); last space 0, fw >= 0.4
 #define DC32_MSG_TAP            0x85    // u8 kind (1 = single, 2 = double), fw >= 0.3
+#define DC32_MSG_ACCEL          0x88    // s16 x, y, z (raw, +-2 g = +-32768), fw >= 0.4.1
 #define DC32_MSG_ERROR          0x8F    // u8 code, u8 rsv[3], u32 detail
 
 // button ids
