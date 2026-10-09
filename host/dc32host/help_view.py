@@ -15,7 +15,7 @@ from .runner_view import BG, INK, INK2, MUTED, GRID, HOSTED, OK, _ttf
 # Page 1 — views/apps, numbered 1..9,0 (the number key opens it while help is up).
 KEYS = [("B", "runner costs", "toggle_runner"), ("F", "Flipper Zero", "flipper"),
         ("W", "spectrum / SDR", "sdr_view"), ("V", "RF bench", "rf_bench"),
-        ("E", "IR scope", "ir_scope"), ("O", "bubble level", "level"),
+        ("E", "IR scope", "ir_scope"), ("O", "level", "level"),
         ("U", "system monitor", "system"), ("C", "clock", "clock"),
         ("M", "command menu", "command_menu"), ("P", "Doom II", "doom2")]
 NUMBERED = [a for _, _, a in KEYS]               # number n opens KEYS[n-1]; 0 = the 10th
@@ -30,7 +30,7 @@ BADGE = [("FN", "menu"), ("B", "back / close"),
 APPS = [("Flipper", "D-pad move · A=OK · B=Back · Ctrl+Alt+Y = PC keys"),
         ("Spectrum", "◀▶ tune · ▲▼ step · A=band · START=audio"),
         ("RF bench", "A=arm · START=verify · hold A=self-test · ◀▶ band"),
-        ("Bubble level", "hold flat, screen up; bubble floats to the high side"),
+        ("Level", "hold flat, screen up; tilts like a ball to the low side"),
         ("Command menu", "↑↓ or type a letter · Enter run · Esc close")]
 PAGES = 3
 ROW_SHADE = (34, 34, 33)
