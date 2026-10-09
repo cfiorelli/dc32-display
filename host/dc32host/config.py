@@ -35,6 +35,7 @@ DEFAULTS = {
     "fps_idle": 12,                   # capture polls/s when nothing changed recently
     "max_frames_in_flight": 2,
     "brightness": 22,                 # 0..31
+    "idle_clock_s": 0,                # show the drifting clock after this many idle seconds (0 = off)
     "dim_after_s": 600,               # dim the badge backlight after this long without PC/badge input (0 = never)
     "dim_brightness": 2,
     "tap_sleep": True,                # knock-knock on the badge (2 taps 0.3-1 s apart): sleep / wake
