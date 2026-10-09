@@ -32,6 +32,7 @@ COMMANDS = [
     ("Sleep (screen off)", "sleep"),
     ("Shortcuts / help", "toggle_help"),
     ("System monitor", "system"),
+    ("Clock screensaver", "clock"),
 ]
 ROWS = 9                               # visible rows
 
