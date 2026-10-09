@@ -721,7 +721,9 @@ class Daemon:
     def _level(self):
         if getattr(self, "levelv", None) is None:
             from .level_view import LevelView
-            self.levelv = LevelView()
+            self.levelv = LevelView(rotate=int(self.cfg.get("level_rotate", 90)),
+                                    flip_x=bool(self.cfg.get("level_flip_x", False)),
+                                    flip_y=bool(self.cfg.get("level_flip_y", False)))
         return self.levelv
 
     def _clock(self):
