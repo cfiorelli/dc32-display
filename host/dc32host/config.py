@@ -40,6 +40,9 @@ DEFAULTS = {
     "dim_brightness": 2,
     "tap_sleep": True,                # knock-knock on the badge (2 taps 0.3-1 s apart): sleep / wake
     "tap_threshold": 12,              # 1..127 x 16 mg (12 = 192 mg); lower = lighter taps count (fw >= 0.3)
+    "level_rotate": 90,               # bubble level: rotate accel axes to the screen (0/90/180/270)
+    "level_flip_x": False,            # mirror the bubble's left-right if it moves the wrong way
+    "level_flip_y": False,
     "sd_writable": False,             # microSD as a USB drive: read-only unless enabled (ctl sd_rw / sd_ro)
     "lights_mode": "off",             # off | bright | wave | rainbow | rave | runner  (Ctrl+Alt+G cycles)
     "show_cursor": True,
