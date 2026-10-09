@@ -662,7 +662,7 @@ class Daemon:
             self.say({"mirror": "Mirroring screen", "runner": "Runner costs", "paused": "Display paused",
                       "ir": "IR scope", "flipper": "Flipper", "sdr": "Spectrum (SDR)",
                       "bench": "RF bench", "sys": "System monitor", "clock": "Clock",
-                      "level": "Bubble level"}[view],
+                      "level": "Level"}[view],
                      "Ctrl+Alt+Y: keyboard -> badge" if view in self.KEYBOARD_VIEWS
                      else "FN: menu" if view != "mirror" else "")
         self.vp.reset()
