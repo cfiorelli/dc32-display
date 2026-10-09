@@ -8,3 +8,4 @@ void accel_set_tap_threshold(uint8_t ths);   // 1..127, 16 mg/LSB at +-2 g; 0 = 
 // Poll at ~50 Hz. Returns 0 (nothing), 1 (single tap) or 2 (double tap).
 uint8_t accel_poll_tap(void);
 void accel_self_test_pulse(void);   // simulated tap (tests)
+bool accel_read_xyz(int16_t *x, int16_t *y, int16_t *z);   // raw 16-bit, +-2 g = +-32768
