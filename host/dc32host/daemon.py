@@ -246,6 +246,14 @@ class Daemon:
         elif self.dimmed and idle < after:
             self.dimmed = False
             self.send(P.set_brightness(self.brightness))
+        # clock screensaver: show it after idle_clock_s of no input (from the mirror only), back on input
+        cs = float(self.cfg.get("idle_clock_s", 0))
+        if cs > 0 and not self.sleeping:
+            if idle > cs and self.view == "mirror":
+                self.prev_view = "mirror"
+                self.set_view("clock")
+            elif idle < 2 and self.view == "clock":
+                self.set_view("mirror")
 
     def _save_pref(self, key, value):
         """Persist a user preference (e.g. lights mode) into config.json without touching the rest."""
@@ -451,6 +459,8 @@ class Daemon:
                 return
             self.set_keyboard(not getattr(self, "kb_focus", None))
             self.say("Keyboard -> badge (Ctrl+Alt+Y: back to PC)" if self.kb_focus else "Keyboard -> PC")
+        elif name in ("clock", "toggle_clock"):   # Ctrl+Alt+C: drifting clock screensaver
+            self.set_view("mirror" if self.view == "clock" else "clock")
         elif name in ("system", "toggle_system"):   # Ctrl+Alt+U: live system monitor
             self.set_view("mirror" if self.view == "sys" else "sys")
         elif name in ("command_menu", "toggle_cmd"):   # Ctrl+Alt+M: every action, keyboard-driven
@@ -649,7 +659,7 @@ class Daemon:
         if view not in ("help", "cmd"):
             self.say({"mirror": "Mirroring screen", "runner": "Runner costs", "paused": "Display paused",
                       "ir": "IR scope", "flipper": "Flipper", "sdr": "Spectrum (SDR)",
-                      "bench": "RF bench", "sys": "System monitor"}[view],
+                      "bench": "RF bench", "sys": "System monitor", "clock": "Clock"}[view],
                      "Ctrl+Alt+Y: keyboard -> badge" if view in self.KEYBOARD_VIEWS
                      else "FN: menu" if view != "mirror" else "")
         self.vp.reset()
@@ -702,6 +712,12 @@ class Daemon:
             src = SdrSource(freq=float(self.cfg.get("sdr_freq", 433.92e6)))
             self.sdr = (src, SdrView(src))
         return self.sdr
+
+    def _clock(self):
+        if getattr(self, "clockv", None) is None:
+            from .clock_view import ClockView
+            self.clockv = ClockView()
+        return self.clockv
 
     def _sys(self):
         if getattr(self, "sysv", None) is None:
@@ -988,6 +1004,8 @@ class Daemon:
             return time.time(), self._cmd().render(), False
         if self.view == "sys":
             return time.time(), self._sys().render(), False
+        if self.view == "clock":
+            return time.time(), self._clock().render(), False
         if self.view == "flipper":
             self._flipper()[1].kb_here = getattr(self, "kb_focus", None) == "flipper"
             return time.time(), self._flipper()[1].render(), False
