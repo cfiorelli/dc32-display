@@ -48,9 +48,12 @@ class SystemView:
                time.strftime("%a %d %b", t), font=self.f_s, fill=INK2)
         d.line([0, 26, W, 26], fill=GRID)
 
-        # CPU: overall % + per-core mini bars
-        cpu = psutil.cpu_percent() / 100.0
-        per = [p / 100.0 for p in psutil.cpu_percent(percpu=True)]
+        # CPU: overall % + per-core mini bars, sampled over ~1 s so the bars don't jitter
+        if not hasattr(self, "_cpu_t") or time.time() - self._cpu_t >= 1.0:
+            self._cpu = psutil.cpu_percent() / 100.0
+            self._per = [p / 100.0 for p in psutil.cpu_percent(percpu=True)]
+            self._cpu_t = time.time()
+        cpu, per = getattr(self, "_cpu", 0.0), getattr(self, "_per", [])
         d.text((8, 32), f"CPU {cpu * 100:4.0f}%", font=self.f, fill=INK)
         cx = 92
         bw = (W - cx - 8) / max(1, len(per))
@@ -73,14 +76,18 @@ class SystemView:
         d.text((8, 108), f"Disk {du.percent:3.0f}%  {du.free / 1e9:.0f} GB free", font=self.f, fill=INK)
         _bar(d, 8, 126, W - 16, 12, du.percent / 100.0, _heat(du.percent / 100.0))
 
-        # Network throughput (delta since last render)
-        io = psutil.net_io_counters()
+        # Network throughput: sample over a fixed ~1 s window (not per-frame) and smooth, so it reads
+        # steadily instead of flickering with the render rate.
         nt = time.time()
-        if self._net is not None and nt > self._net_t:
+        if self._net is not None and nt - self._net_t >= 1.0:
             dt = nt - self._net_t
-            self._rx = (io.bytes_recv - self._net.bytes_recv) / dt
-            self._tx = (io.bytes_sent - self._net.bytes_sent) / dt
-        self._net, self._net_t = io, nt
+            rx = (io := psutil.net_io_counters()).bytes_recv - self._net.bytes_recv
+            tx = io.bytes_sent - self._net.bytes_sent
+            self._rx += 0.5 * (max(0, rx) / dt - self._rx)
+            self._tx += 0.5 * (max(0, tx) / dt - self._tx)
+            self._net, self._net_t = io, nt
+        elif self._net is None:
+            self._net, self._net_t = psutil.net_io_counters(), nt
         d.text((8, 148), f"net  down {_rate(self._rx)}   up {_rate(self._tx)}", font=self.f, fill=INK)
 
         # CPU temperature (if exposed)
