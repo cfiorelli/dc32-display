@@ -31,6 +31,7 @@ COMMANDS = [
     ("Mode: follow / pin / desktop", "cycle_mode"),
     ("Sleep (screen off)", "sleep"),
     ("Shortcuts / help", "toggle_help"),
+    ("System monitor", "system"),
 ]
 ROWS = 9                               # visible rows
 
