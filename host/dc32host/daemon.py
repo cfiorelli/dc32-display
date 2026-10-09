@@ -451,6 +451,8 @@ class Daemon:
                 return
             self.set_keyboard(not getattr(self, "kb_focus", None))
             self.say("Keyboard -> badge (Ctrl+Alt+Y: back to PC)" if self.kb_focus else "Keyboard -> PC")
+        elif name in ("system", "toggle_system"):   # Ctrl+Alt+U: live system monitor
+            self.set_view("mirror" if self.view == "sys" else "sys")
         elif name in ("command_menu", "toggle_cmd"):   # Ctrl+Alt+M: every action, keyboard-driven
             if self.view == "cmd":
                 self.set_view(self.prev_view if self.prev_view != "cmd" else "mirror")
@@ -647,7 +649,7 @@ class Daemon:
         if view not in ("help", "cmd"):
             self.say({"mirror": "Mirroring screen", "runner": "Runner costs", "paused": "Display paused",
                       "ir": "IR scope", "flipper": "Flipper", "sdr": "Spectrum (SDR)",
-                      "bench": "RF bench"}[view],
+                      "bench": "RF bench", "sys": "System monitor"}[view],
                      "Ctrl+Alt+Y: keyboard -> badge" if view in self.KEYBOARD_VIEWS
                      else "FN: menu" if view != "mirror" else "")
         self.vp.reset()
@@ -700,6 +702,12 @@ class Daemon:
             src = SdrSource(freq=float(self.cfg.get("sdr_freq", 433.92e6)))
             self.sdr = (src, SdrView(src))
         return self.sdr
+
+    def _sys(self):
+        if getattr(self, "sysv", None) is None:
+            from .system_view import SystemView
+            self.sysv = SystemView()
+        return self.sysv
 
     def _cmd(self):
         if getattr(self, "cmd", None) is None:
@@ -978,6 +986,8 @@ class Daemon:
             return time.time(), self._ir().render(), False
         if self.view == "cmd":
             return time.time(), self._cmd().render(), False
+        if self.view == "sys":
+            return time.time(), self._sys().render(), False
         if self.view == "flipper":
             self._flipper()[1].kb_here = getattr(self, "kb_focus", None) == "flipper"
             return time.time(), self._flipper()[1].render(), False

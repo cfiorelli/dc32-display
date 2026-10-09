@@ -9,6 +9,7 @@
 #   Ctrl+Alt+W        RTL-SDR spectrum + waterfall (arrows tune/step, Enter = next band)
 #   Ctrl+Alt+V        RF bench (with Ctrl+Alt+Y: Enter arm, Space replay+verify, Shift+Enter self-test)
 #   Ctrl+Alt+M        command menu: every action, arrow keys + Enter (no reaching for the badge)
+#   Ctrl+Alt+U        system monitor: clock, CPU, RAM, disk, net, temp, uptime
 #   Ctrl+Alt+Y        keyboard -> badge view (Flipper / spectrum / bench) and back; off on every view change
 #   Ctrl+Alt+S        sleep: backlight off until any keyboard/mouse/badge input
 #   Ctrl+Alt+G        next light mode (off, bright, wave, rainbow, rave, runner status)
@@ -28,6 +29,7 @@ KEYS=(
   "dc32-sdr|DC32 badge: SDR spectrum + waterfall|<Primary><Alt>w|sdr_view"
   "dc32-bench|DC32 badge: RF bench (capture, decode, Flipper replay, verify)|<Primary><Alt>v|rf_bench"
   "dc32-cmd|DC32 badge: command menu (all actions, keyboard)|<Primary><Alt>m|command_menu"
+  "dc32-sys|DC32 badge: system monitor|<Primary><Alt>u|system"
   "dc32-keyboard|DC32 badge: hand the keyboard to the badge view / back|<Primary><Alt>y|keyboard"
   "dc32-lights|DC32 badge: next light mode|<Primary><Alt>g|lights_next"
   "dc32-sleep|DC32 badge: sleep (screen off, any input wakes)|<Primary><Alt>s|sleep"
