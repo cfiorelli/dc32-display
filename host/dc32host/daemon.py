@@ -1265,6 +1265,11 @@ class Daemon:
         if once_seconds is None:
             self.start_control()
             self.start_heartbeat()
+            if self.cfg.get("runner_background", True):   # keep GitHub data fresh even when not viewing it
+                try:
+                    self._runner()
+                except Exception as e:
+                    log.debug("runner background start skipped: %s", e)
         waiting_logged = False
         while t_end is None or time.time() < t_end:
             if not self.badge.connected:
