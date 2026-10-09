@@ -516,16 +516,14 @@ class Daemon:
         elif name == "refresh_data":       # Ctrl+Alt+R: fetch GitHub runner data now
             self._runner().data.refresh_now()
             self.say("Updating runner data")
-        elif name in ("help", "toggle_help"):     # Ctrl+Alt+H: page 1 -> page 2 -> close
+        elif name in ("help", "toggle_help"):     # Ctrl+Alt+H: open, then cycle pages (Esc or B closes)
             from .help_view import PAGES
             if self.view != "help":
                 self.help_page = 0
                 self.set_view("help")
-            elif getattr(self, "help_page", 0) + 1 < PAGES:
-                self.help_page += 1
-                self.force_refresh()
             else:
-                self.set_view(self.prev_view if self.prev_view != "help" else "mirror")
+                self.help_page = (getattr(self, "help_page", 0) + 1) % PAGES
+                self.force_refresh()
         elif name in ("lights_next", "lights_cycle"):
             from .lights import LABELS
             self.lights.next_mode()
