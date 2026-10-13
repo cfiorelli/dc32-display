@@ -40,7 +40,8 @@ Both are drawn natively at the badge's 320×240 (shown here at 2×; the runner v
 
 Typing while in fit mode zooms to 1:1 around the caret and stays there until **B**. Only screen
 changes that follow a keystroke move the view, so spinners, clocks and page loads don't drag it
-around. The backlight dims after 10 minutes without PC or badge input; any input wakes it.
+around. The backlight dims after 10 minutes without PC or badge input; any input wakes it. The LEDs
+do not dim with it: they hold the light level you set.
 
 All mappings live in `~/.config/dc32-display/config.json` (`"buttons"`).
 
