@@ -13,7 +13,7 @@ from . import capture as C
 from .runner_view import BG, INK, INK2, MUTED, GRID, HOSTED, OK, _ttf
 
 # Page 1 — views/apps, numbered 1..9,0 (the number key opens it while help is up).
-KEYS = [("B", "runner costs", "toggle_runner"), ("F", "Flipper Zero", "flipper"),
+KEYS = [("B", "runner / report", "toggle_report"), ("F", "Flipper Zero", "flipper"),
         ("W", "spectrum / SDR", "sdr_view"), ("V", "RF bench", "rf_bench"),
         ("E", "IR scope", "ir_scope"), ("O", "level", "level"),
         ("U", "system monitor", "system"), ("C", "clock", "clock"),

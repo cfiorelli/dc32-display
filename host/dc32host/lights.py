@@ -1,8 +1,9 @@
 """Badge LED modes (9 WS2812s; fw >= 0.2). Animated on the host at ~30 fps, 27 bytes per frame.
 
-Ctrl+Alt+G / FN > Lights cycles: off -> bright -> wave -> rainbow -> rave -> runner -> off.
+Ctrl+Alt+G / FN > Lights cycles: off -> bright -> ... -> runner -> attention -> off.
 `runner` shows the self-hosted runner: soft green breathing when idle, amber pulse while a job runs,
 a green flash when a job just succeeded, slow red blink for 10 minutes after a failure.
+`attention` shows one steady LED per thing that needs you (see attention.py); stale data blinks white.
 """
 from __future__ import annotations
 
@@ -13,11 +14,12 @@ import random
 
 N = 9
 FRONT, REAR = (0, 2, 4, 5, 6), (1, 3, 7, 8)
-MODES = ["off", "bright", "breathe", "wave", "comet", "rainbow", "fire", "cpu", "police", "rave", "runner"]
+MODES = ["off", "bright", "breathe", "wave", "comet", "rainbow", "fire", "cpu", "police", "rave", "runner", "attention"]
 LABELS = {"off": "Lights off", "bright": "Lights: bright", "breathe": "Lights: breathe",
           "wave": "Lights: slow wave", "comet": "Lights: comet", "rainbow": "Lights: rainbow",
           "fire": "Lights: fire", "cpu": "Lights: CPU meter", "police": "Lights: police",
-          "rave": "Lights: rave", "runner": "Lights: runner status"}
+          "rave": "Lights: rave", "runner": "Lights: runner status",
+          "attention": "Lights: needs-you status"}
 
 
 def _hsv(h, s, v):
@@ -46,7 +48,8 @@ class Lights:
     def animated(self):
         return self.mode not in ("off", "bright")
 
-    def frame(self, t: float, runner_local: dict | None = None) -> list:
+    def frame(self, t: float, runner_local: dict | None = None, attention: dict | None = None,
+              leds_map: dict | None = None) -> list:
         m = self.mode
         if m == "off":
             return _all((0, 0, 0))
@@ -100,6 +103,9 @@ class Lights:
             return self._rave
         if m == "runner":
             return self._runner(t, runner_local or {})
+        if m == "attention":
+            from . import attention as A
+            return A.frame(t, attention or {"stale": True, "indicators": []}, leds_map or A.DEFAULT_LEDS)
         return _all((0, 0, 0))
 
     def _runner(self, t, loc):
