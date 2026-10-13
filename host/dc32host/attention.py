@@ -26,6 +26,7 @@ from . import capture as C
 from .runner_view import BG, INK, INK2, MUTED, GRID, BAD, WARN, OK, _ttf
 
 PATH = Path.home() / ".cache" / "dc32-display" / "attention.json"
+ORDER_PATH = Path.home() / ".cache" / "dc32-display" / "eng-order.json"   # pushed next to attention.json
 STALE_S = 600
 LIT = (255, 80, 0)                    # lit with no level given (older writers)
 # red = act now, yellow = heads-up. LED values are tuned for the WS2812s; screen values for the LCD.
@@ -63,10 +64,21 @@ def load(path=None, now=None, stale_s=STALE_S):
             raw = json.load(f)
         at = _parse(raw.get("at"))
         inds = [i for i in raw.get("indicators", []) if isinstance(i, dict) and i.get("id")]
+        backlog = [b for b in raw.get("backlog", []) if isinstance(b, dict)]
     except (OSError, ValueError, AttributeError):
-        return {"stale": True, "age": None, "indicators": []}
+        return {"stale": True, "age": None, "indicators": [], "backlog": []}
     age = (now - at).total_seconds() if at else None
-    return {"stale": age is None or age > stale_s or age < -120, "age": age, "indicators": inds}
+    return {"stale": age is None or age > stale_s or age < -120, "age": age, "indicators": inds, "backlog": backlog}
+
+
+def load_order(path=None):
+    """The engineering order (stages), or None when the file is missing or unreadable."""
+    try:
+        with open(path or ORDER_PATH, encoding="utf-8") as f:
+            raw = json.load(f)
+        return raw if isinstance(raw, dict) else None
+    except (OSError, ValueError):
+        return None
 
 
 def lit_leds(state, leds_map):
@@ -168,6 +180,7 @@ TH_GLOW = (96, 30, 0)          # under a lit trace
 TH_SOFT = (128, 100, 160)      # descriptor of a clear signal that still has one (CI spend)
 # Agent Ops tag colours: pr-watch.py GOAL_STYLE ("API Check" shows as API)
 TAG_RGB = {"DWT": (0x5f, 0xd7, 0xff), "Ops": (0xff, 0xaf, 0x5f), "API": (0xff, 0x87, 0xd7), "Eng": (0xaf, 0xff, 0x5f)}
+L1W = 150                     # label + counts line; only the right column's "Priority blocked" (116 px) plus "2R 1Y" needs more than COLW
 COLW = 130                     # hard cap on a column's text width; left starts at x=22, right ends at x=298, so they never meet
 
 # Faint PCB traces behind everything: (polyline, via at end?)
@@ -226,7 +239,7 @@ def render(state, slots_map=None, now=None, boxes=None):
     d = ImageDraw.Draw(img)
     _background(d)
     f_t, f_l, f_s, f_big = _ttf(13, bold=True), _ttf(13, bold=True), _ttf(11), _ttf(44, bold=True)
-    f_d, f_tag = _ttf(13), _ttf(13, bold=True)     # descriptor line: tag and reason share one size and one baseline
+    f_d, f_tag, f_cnt = _ttf(13), _ttf(13, bold=True), _ttf(11, bold=True)     # descriptor line: tag and reason share one size and one baseline
     stale = state["stale"]
     by_slot = {}
     for n, i in enumerate(state["indicators"]):
@@ -271,7 +284,13 @@ def render(state, slots_map=None, now=None, boxes=None):
             d.ellipse([pad[0] - 4, pad[1] - 4, pad[0] + 4, pad[1] + 4], fill=col)
         else:
             _via(d, pad, 3, TH_VIOLET if not stale else (150, 150, 160))
-        label = _fit(d, ind.get("label") or ind["id"].replace("_", " "), f_l, COLW)
+        # "<n>R <n>Y": how many items sit behind this light, only when there is more than one (the age's old slot)
+        cn = ind.get("counts") or {}
+        runs = [("%d%s" % (cn.get(k) or 0, k[0].upper()), LEVEL_SCREEN[k]) for k in ("red", "yellow") if (cn.get(k) or 0) > 0]
+        runs = runs if lit and sum(cn.get(k) or 0 for k in ("red", "yellow")) > 1 else []
+        cw = [d.textlength(t + " ", font=f_cnt) for t, _ in runs]
+        countw = sum(cw) + 4 if runs else 0
+        label = _fit(d, ind.get("label") or ind["id"].replace("_", " "), f_l, (L1W if runs else COLW) - countw)
         # descriptor: [tag] reason, one line, never wider than the column
         tag = ind.get("tag") if lit and ind.get("tag") in TAG_RGB else ""
         tagw = d.textlength(tag + " ", font=f_tag) if tag else 0
@@ -283,8 +302,54 @@ def render(state, slots_map=None, now=None, boxes=None):
         else:
             lx, dx = C.OUT_W - 22 - d.textlength(label, font=f_l), C.OUT_W - 22 - total
         put(side, (lx, y), label, f_l, INK if lit else TH_VIOLET)
+        cx = lx + d.textlength(label, font=f_l) + 6 if side == "left" else lx - countw - 2
+        for (t, c), w in zip(runs, cw):
+            put(side, (cx, y + 2), t, f_cnt, c)
+            cx += w
         if tag:
             put(side, (dx, y + 31), tag, f_tag, TAG_RGB[tag], "ls")
         if reason:
             put(side, (dx + tagw, y + 31), reason, f_d, col if lit else TH_SOFT, "ls")
+    return np.asarray(img).copy()
+
+
+STATE_RGB = {"blocked": LEVEL_SCREEN["red"], "active": TH_CYAN, "next": (150, 130, 180), "later": TH_DIM}
+
+
+def render_backlog(order, extra=None, now=None, boxes=None):
+    """Backlog view: the engineering order, one glanceable line per stage (number, name, state colour;
+    a blocked stage gets a short reason on the right), then open fio-queue items marked view=backlog."""
+    img = Image.new("RGB", (C.OUT_W, C.OUT_H), TH_BG)
+    d = ImageDraw.Draw(img)
+    _background(d)
+    f_t, f_row, f_r = _ttf(13, bold=True), _ttf(15), _ttf(13)
+    title = "B A C K L O G"
+    d.text((C.OUT_W - 12 - d.textlength(title, font=f_t), 9), title, font=f_t, fill=TH_CYAN)
+    d.line([(C.OUT_W - 12 - d.textlength(title, font=f_t), 27), (C.OUT_W - 12, 27)], fill=TH_MAGENTA, width=1)
+    rows = []
+    for s in (order or {}).get("stages", []) if isinstance(order, dict) else []:
+        rows.append((str(s.get("id", "")), str(s.get("name", "")), str(s.get("state", "later")),
+                     str(s.get("blocked_short") or s.get("blocked_by") or "") if s.get("state") == "blocked" else ""))
+    for b in extra or []:
+        rows.append(("", "%s %s" % (b.get("tag", ""), b.get("short", "")), "next", ""))
+    if not rows:
+        d.text((22, 100), "no engineering order yet", font=f_row, fill=TH_DIM)
+        return np.asarray(img).copy()
+    ROWS, y0, dy = 8, 40, 25
+    more = len(rows) - ROWS
+    for n, (num, name, state, why) in enumerate(rows[:ROWS - 1] if more > 0 else rows):
+        y = y0 + n * dy
+        col = STATE_RGB.get(state, TH_DIM)
+        d.ellipse([12, y + 5, 20, y + 13], fill=col)
+        reason = _fit(d, why, f_r, 110) if why else ""
+        rw = d.textlength(reason, font=f_r) if reason else 0
+        txt = ("%s  %s" % (num, name)) if num else name
+        txt = _fit(d, txt, f_row, C.OUT_W - 30 - 12 - (rw + 10 if rw else 0))
+        d.text((28, y), txt, font=f_row, fill=col if state != "blocked" else INK)
+        if boxes is not None:
+            boxes.append(("row", *d.textbbox((28, y), txt, font=f_row)))
+        if reason:
+            d.text((C.OUT_W - 12 - rw, y + 1), reason, font=f_r, fill=STATE_RGB["blocked"])
+    if more > 0:
+        d.text((28, y0 + (ROWS - 1) * dy), "+%d more" % (more + 1), font=f_row, fill=TH_DIM)
     return np.asarray(img).copy()
