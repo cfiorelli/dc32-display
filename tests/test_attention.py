@@ -22,7 +22,7 @@ def iso(sec_ago):
 LEVELS = {'production': 'yellow', 'pr_waiting': 'yellow', 'priority_blocked': 'red', 'spend': 'yellow'}
 
 
-def doc(age, lit=(), tags=None, quiet=None, levels=None):
+def doc(age, lit=(), tags=None, quiet=None, levels=None, counts=None):
     """lit: id -> descriptor; tags: id -> Lab|Ops|API|Eng; quiet: id -> descriptor kept while unlit (CI spend)."""
     inds = []
     for i, (k, label) in enumerate([('priority_blocked', 'Priority blocked'), ('production', 'Prod + tests'),
@@ -30,7 +30,8 @@ def doc(age, lit=(), tags=None, quiet=None, levels=None):
         on = k in lit
         inds.append({'id': k, 'label': label, 'lit': on, 'reason': lit[k] if on else (quiet or {}).get(k, ''),
                      'tag': (tags or {}).get(k) if on else None, 'since': iso(3 * 3600) if on else None,
-                     'link': None, 'level': (levels or {}).get(k, LEVELS.get(k)) if on else None})
+                     'link': None, 'level': (levels or {}).get(k, LEVELS.get(k)) if on else None,
+                     'counts': (counts or {}).get(k, {'red': 0, 'yellow': 0})})
     return {'at': iso(age), 'indicators': inds}
 
 
@@ -50,6 +51,13 @@ FIXTURES = {
     'longest': doc(40, {'priority_blocked': 'Lab account', 'production': 'deskpc off', 'spend': '$70/$80',
                         'capacity': 'Claude bal: 17%', 'pr_waiting': 'sample#1234'},
                    {'priority_blocked': 'Ops', 'pr_waiting': 'Ops'}, levels={'spend': 'red', 'capacity': 'red', 'production': 'yellow'}),
+    # several items behind a light: 'nR nY' next to the label, only above one
+    'counts': doc(40, {'priority_blocked': 'Lab account', 'pr_waiting': 'sample#1234', 'capacity': 'Codex bal: 4%', 'production': 'deskpc off'},
+                  {'priority_blocked': 'Ops', 'pr_waiting': 'Ops'}, levels={'capacity': 'red'},
+                  counts={'priority_blocked': {'red': 2, 'yellow': 0}, 'pr_waiting': {'red': 0, 'yellow': 3},
+                          'capacity': {'red': 1, 'yellow': 1}, 'production': {'red': 0, 'yellow': 1}}),
+    'counts_big': doc(40, {'priority_blocked': 'Lab account', 'pr_waiting': 'sample#1234'}, {'priority_blocked': 'Ops'},
+                      counts={'priority_blocked': {'red': 12, 'yellow': 10}, 'pr_waiting': {'red': 0, 'yellow': 12}}),
     'api': doc(40, {'priority_blocked': 'API limits'}, {'priority_blocked': 'API'}),
     'notag': doc(40, {'priority_blocked': 'task-12'}, {'priority_blocked': 'Eng'}),
     'spend_low': doc(40, quiet={'spend': '$20/$80'}),
@@ -134,9 +142,11 @@ class Columns(unittest.TestCase):
                 lx, rx = np.flatnonzero(left[y]), np.flatnonzero(right[y])
                 if len(lx) and len(rx):
                     self.assertGreaterEqual(rx.min() - lx.max(), 8, '%s row %d' % (name, y))
-            # and across rows: no left text pixel within 8 px of ANY right text pixel, so a taller glyph cannot clip either
-            if left.any() and right.any():
-                self.assertGreaterEqual(np.flatnonzero(right.any(axis=0)).min() - np.flatnonzero(left.any(axis=0)).max(), 8, name)
+            # and per slot row band (same y range), so a glyph taller than its row cannot clip a neighbour
+            for lo, hi in ((0, 60), (130, 190), (196, 240)):
+                lx, rx = np.flatnonzero(left[lo:hi].any(axis=0)), np.flatnonzero(right[lo:hi].any(axis=0))
+                if len(lx) and len(rx):
+                    self.assertGreaterEqual(rx.min() - lx.max(), 8, '%s band %d' % (name, lo))
 
     def test_tag_and_descriptor_share_a_baseline_and_size(self):
         boxes = []
@@ -154,12 +164,29 @@ class Columns(unittest.TestCase):
             A.render(A.load(write(obj), now=NOW), now=NOW, boxes=boxes)
             for side, x0, y0, x1, y1 in boxes:
                 if side == 'left':
-                    self.assertTrue(22 <= x0 and x1 <= 22 + A.COLW + 2, (name, side, x0, x1))
+                    self.assertTrue(22 <= x0 and x1 <= 22 + A.L1W + 2, (name, side, x0, x1))
                 else:
-                    self.assertTrue(320 - 22 - A.COLW - 2 <= x0 and x1 <= 320 - 22 + 2, (name, side, x0, x1))
-            lefts = [b[3] for b in boxes if b[0] == 'left']; rights = [b[1] for b in boxes if b[0] == 'right']
-            if lefts and rights:
-                self.assertGreaterEqual(min(rights) - max(lefts), 8, name)
+                    self.assertTrue(320 - 22 - A.L1W - 2 <= x0 and x1 <= 320 - 22 + 2, (name, side, x0, x1))
+            for lo, hi in ((0, 60), (130, 190), (196, 240)):
+                lefts = [b[3] for b in boxes if b[0] == 'left' and lo <= b[2] < hi]; rights = [b[1] for b in boxes if b[0] == 'right' and lo <= b[2] < hi]
+                if lefts and rights:
+                    self.assertGreaterEqual(min(rights) - max(lefts), 8, (name, lo))
+
+    def test_counts_only_above_one(self):
+        def texts(obj):
+            seen = []
+            orig = A.ImageDraw.ImageDraw.text
+            A.ImageDraw.ImageDraw.text = lambda self, xy, text, *a, **k: (seen.append(str(text)), orig(self, xy, text, *a, **k))[1]
+            try:
+                A.render(A.load(write(obj), now=NOW), now=NOW)
+            finally:
+                A.ImageDraw.ImageDraw.text = orig
+            return seen
+        t = texts(FIXTURES['counts'])
+        for want in ('2R', '3Y', '1R', '1Y'):
+            self.assertIn(want, t)
+        self.assertEqual([x for x in t if x[-1:] in 'RY' and x[:-1].isdigit()].count('1Y'), 1)    # capacity 1R+1Y only; production (1 item) draws none
+        self.assertFalse([x for x in texts(FIXTURES['longest']) if x[-1:] in 'RY' and x[:-1].isdigit()], 'one item per light: no counts')
 
     def test_only_descriptor_and_label_are_drawn(self):
         seen = []
@@ -200,6 +227,35 @@ class Columns(unittest.TestCase):
         for i in bare['indicators']:
             i['reason'] = ''
         self.assertTrue((A.render(A.load(write(quiet), now=NOW), now=NOW) == A.render(A.load(write(bare), now=NOW), now=NOW)).all())
+
+
+ORDER = {'stages': [
+    {'id': 1, 'name': 'Current work', 'state': 'active'},
+    {'id': 2, 'name': 'Sample client', 'state': 'blocked', 'blocked_short': 'needs account'},
+    {'id': 3, 'name': 'Local dashboard', 'state': 'next'},
+    {'id': 4, 'name': 'Next project', 'state': 'later'},
+    {'id': 5, 'name': 'Stage five with a name too long to fit the row', 'state': 'next'},
+]}
+EXTRA = [{'tag': 'Lab', 'short': 'Review notes'}, {'tag': 'Eng', 'short': 'Demo copy'}, {'tag': 'API', 'short': 'API limits'}]
+
+
+class Backlog(unittest.TestCase):
+    def test_renders_live_shape_and_eight_items(self):
+        for order, extra in ((ORDER, []), (ORDER, EXTRA), (ORDER, EXTRA * 2), (None, []), ({'stages': []}, None)):
+            self.assertEqual(A.render_backlog(order, extra).shape, (240, 320, 3))
+
+    def test_rows_fit_and_blocked_reason_shows(self):
+        boxes = []
+        A.render_backlog(ORDER, EXTRA, boxes=boxes)
+        self.assertEqual(len(boxes), 8)
+        for _, x0, y0, x1, y1 in boxes:
+            self.assertTrue(28 <= x0 and x1 <= 320 - 12 and y1 <= 240, (x0, y0, x1, y1))
+        self.assertFalse((A.render_backlog(ORDER) == A.render_backlog({'stages': [dict(s, state='next') for s in ORDER['stages']]})).all())
+
+    def test_loads_order_file(self):
+        self.assertEqual(A.load_order(write(ORDER))['stages'][1]['name'], 'Sample client')
+        self.assertIsNone(A.load_order('/nonexistent/eng-order.json'))
+        self.assertEqual(A.load(write(dict(doc(40), backlog=EXTRA)), now=NOW)['backlog'], EXTRA)
 
 
 def render_all(outdir):

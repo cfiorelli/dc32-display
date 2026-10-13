@@ -480,8 +480,10 @@ class Daemon:
         elif name in ("view_report", "toggle_report"):   # Ctrl+Alt+B: runner costs <-> needs-you report
             if name == "view_report":
                 self.set_view("report")
-            else:
-                self.set_view("report" if self.view == "runner" else "runner")
+            else:        # runner -> report -> backlog -> runner
+                self.set_view({"runner": "report", "report": "backlog"}.get(self.view, "runner"))
+        elif name == "view_backlog":
+            self.set_view("backlog")
         elif name == "leds_identify":      # light LED 0..8 in turn and show its index (confirms attention_leds)
             if self._identify is not None:
                 self.stop_identify()
@@ -744,7 +746,7 @@ class Daemon:
             self.say({"mirror": "Mirroring screen", "runner": "Runner costs", "paused": "Display paused",
                       "ir": "IR scope", "flipper": "Flipper", "sdr": "Spectrum (SDR)",
                       "bench": "RF bench", "sys": "System monitor", "clock": "Clock",
-                      "level": "Level", "report": "Needs-you report", "identify": "LED identify"}[view],
+                      "level": "Level", "report": "Needs-you report", "backlog": "Backlog", "identify": "LED identify"}[view],
                      "Ctrl+Alt+Y: keyboard -> badge" if view in self.KEYBOARD_VIEWS
                      else "FN: menu" if view != "mirror" else "")
         self.vp.reset()
@@ -871,6 +873,7 @@ class Daemon:
             ("Mirror screen", "view_mirror", self.view == "mirror"),
             ("Runner costs", "view_runner", self.view == "runner"),
             ("Needs-you report", "view_report", self.view == "report"),
+            ("Backlog", "view_backlog", self.view == "backlog"),
             ("Badge terminal", "badge_terminal", bool(self.shown and self.shown.title == "Badge Terminal")),
             ("Switch app...", "app_switcher", False),
             (f"Zoom: {self.vp.zoom} (A cycles)", "zoom_cycle", False),
@@ -1095,6 +1098,9 @@ class Daemon:
         if self.view == "report":
             from . import attention as A
             return time.time(), A.render(self.attention_state(), self.cfg.get("attention_slots")), False
+        if self.view == "backlog":
+            from . import attention as A
+            return time.time(), A.render_backlog(A.load_order(self.cfg.get("eng_order_file")), self.attention_state().get("backlog")), False
         if self.view == "identify":
             from . import attention as A
             idx = A.identify_frame(self._identify, time.time())[1] if self._identify is not None else None
