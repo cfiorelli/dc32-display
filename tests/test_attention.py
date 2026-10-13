@@ -11,6 +11,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'host'))
 from dc32host import attention as A
 from dc32host import lights as L
+from dc32host import daemon as D
 
 NOW = dt.datetime(2026, 10, 13, 12, 0, 0, tzinfo=dt.timezone.utc)
 
@@ -256,6 +257,108 @@ class Backlog(unittest.TestCase):
         self.assertEqual(A.load_order(write(ORDER))['stages'][1]['name'], 'Sample client')
         self.assertIsNone(A.load_order('/nonexistent/eng-order.json'))
         self.assertEqual(A.load(write(dict(doc(40), backlog=EXTRA)), now=NOW)['backlog'], EXTRA)
+
+
+def pdoc(pulses, lit=('priority_blocked', 'production', 'spend', 'capacity', 'pr_waiting')):
+    """Fixture where each id in `lit` is lit and pulses only if listed in `pulses`."""
+    d = doc(40, {k: 'x' for k in lit})
+    for i in d['indicators']:
+        if i['lit']:
+            i['pulse'] = i['id'] in pulses
+    return d
+
+
+class Pulse(unittest.TestCase):
+    def led(self, k): return A.DEFAULT_LEDS[k]
+
+    def test_pulse_vs_solid_per_state_mix(self):
+        cases = [
+            ((), set()),                                            # every item in progress: all solid
+            (('priority_blocked',), {self.led('priority_blocked')}),   # one needs attention: that light pulses
+            (('priority_blocked', 'pr_waiting', 'production'), {self.led(k) for k in ('priority_blocked', 'pr_waiting', 'production')}),
+        ]
+        for pulses, want in cases:
+            st = A.load(write(pdoc(pulses)), now=NOW)
+            self.assertEqual(A.pulse_leds(st, A.DEFAULT_LEDS), want, pulses)
+            self.assertEqual(A.lit_leds(st, A.DEFAULT_LEDS), set(A.DEFAULT_LEDS.values()))       # lit either way
+
+    def test_unlit_and_missing_field(self):
+        st = A.load(write(pdoc((), lit=())), now=NOW)
+        self.assertEqual(A.pulse_leds(st, A.DEFAULT_LEDS), set())
+        old = doc(40, {'production': 'x'})                              # older writer: no `pulse` key -> needs attention -> pulses
+        self.assertEqual(A.pulse_leds(A.load(write(old), now=NOW), A.DEFAULT_LEDS), {self.led('production')})
+
+    def test_count_does_not_drive_the_led(self):
+        d = pdoc(())
+        for i in d['indicators']:
+            i['counts'] = {'red': 5, 'yellow': 5}
+        self.assertEqual(A.pulse_leds(A.load(write(d), now=NOW), A.DEFAULT_LEDS), set())
+        d = pdoc(('priority_blocked',))
+        for i in d['indicators']:
+            i['counts'] = {'red': 1, 'yellow': 0}
+        self.assertEqual(A.pulse_leds(A.load(write(d), now=NOW), A.DEFAULT_LEDS), {self.led('priority_blocked')})
+
+    def test_stale_data_does_not_pulse_it_blinks_white(self):
+        st = A.load(write(dict(pdoc(('production',)), at=iso(25 * 60))), now=NOW)
+        self.assertEqual(A.pulse_leds(st, A.DEFAULT_LEDS), set())
+        on = A.frame(0.0, st, A.DEFAULT_LEDS)
+        self.assertTrue(all(c in (A.STALE_RGB, (0, 0, 0)) for c in on))
+
+    def sequence(self, pct, color=(255, 0, 0)):
+        scaled = D.scale_leds([color], pct)
+        return scaled[0], [A.apply_pulse(scaled, {0}, k * 0.1)[0] for k in range(0, 21)]     # one 2 s period at 10 Hz plus the closing sample
+
+    def test_frame_sequence_at_1_percent(self):
+        peak, seq = self.sequence(1)
+        self.assertEqual(peak, (2, 0, 0))                                # the configured 1% level
+        self.assertEqual(seq[0], (0, 0, 0))                              # off at the start
+        self.assertEqual(seq[10], peak)                                  # peak is exactly the configured level, never above
+        self.assertEqual(seq[20], (0, 0, 0))                             # and off again after 2 s
+        self.assertEqual({c[0] for c in seq}, {0, 1, 2})                 # visible ramp through the one in-between step
+        self.assertTrue(all(c[1] == 0 and c[2] == 0 for c in seq))       # own colour only
+        self.assertTrue(all(max(c) <= max(peak) for c in seq))
+        for a, b in zip(seq[:10], seq[1:11]): self.assertLessEqual(a[0], b[0])     # rises to the peak
+        for a, b in zip(seq[10:20], seq[11:21]): self.assertGreaterEqual(a[0], b[0])   # then falls
+
+    def test_frame_sequence_at_25_percent(self):
+        peak, seq = self.sequence(25)
+        self.assertEqual(peak, (63, 0, 0))
+        self.assertEqual((seq[0], seq[10], seq[20]), ((0, 0, 0), peak, (0, 0, 0)))
+        self.assertGreater(len({c[0] for c in seq}), 8)                  # smooth ramp
+        self.assertTrue(all(max(c) <= 63 for c in seq))
+
+    def test_yellow_keeps_its_hue_and_is_distinct_from_the_stale_blink(self):
+        peak, seq = self.sequence(1, (255, 150, 0))
+        self.assertEqual(peak, (2, 1, 0))
+        self.assertTrue(all(c[2] == 0 for c in seq) and all(c != (255, 255, 255) for c in seq))
+        self.assertEqual(A.PULSE_S, 2.0)                                 # stale blink is a 3 s hard on/off in white (frame())
+
+    def test_solid_light_is_unchanged_by_apply_pulse(self):
+        cols = D.scale_leds([(255, 0, 0)] * 3, 1)
+        self.assertEqual(A.apply_pulse(cols, set(), 0.37), cols)
+        self.assertEqual(A.apply_pulse(cols, {1}, 1.0), cols)            # pulsing LED at its peak equals the solid value
+
+    def test_daemon_pulses_only_after_scaling(self):
+        from test_led_brightness import stub
+        d = stub(1)
+        d._leds_t, d._identify = 0.0, None
+        d.lights = type('L', (), {'mode': 'attention', 'frame': lambda self, *a: [(255, 0, 0)] + [(0, 0, 0)] * 8})()
+        d.attention_state = lambda: A.load(write(pdoc(('priority_blocked',), lit=('priority_blocked',))), now=dt.datetime.now(dt.timezone.utc))
+        d.attention_leds = lambda: {'priority_blocked': 0}
+        sent = []
+        d.send = sent.append
+        import time
+        real = time.time
+        try:
+            seen = set()
+            for t in (100.0, 100.5, 101.0, 101.5, 102.0):
+                time.time = lambda t=t: t
+                d._leds_t = 0.0
+                D.Daemon.update_leds(d)
+                seen.add(d._leds_last[0])
+        finally:
+            time.time = real
+        self.assertEqual(seen, {(0, 0, 0), (1, 0, 0), (2, 0, 0)})
 
 
 def render_all(outdir):
