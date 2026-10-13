@@ -17,13 +17,16 @@ def iso(sec_ago):
     return (NOW - dt.timedelta(seconds=sec_ago)).strftime('%Y-%m-%dT%H:%M:%SZ')
 
 
+LEVELS = {'production': 'yellow', 'pr_waiting': 'yellow', 'priority_blocked': 'red', 'spend': 'yellow'}
+
+
 def doc(age, lit=()):
     inds = []
     for i, (k, label) in enumerate([('priority_blocked', 'Priority blocked'), ('production', 'Prod + tests'),
-                                     ('spend', 'Spend'), ('capacity', 'Capacity'), ('pr_waiting', 'PR waiting')]):
+                                     ('spend', 'CI spend'), ('capacity', 'AI usage'), ('pr_waiting', 'PR waiting')]):
         on = k in lit
         inds.append({'id': k, 'label': label, 'lit': on, 'reason': lit[k] if on else '', 'since': iso(3 * 3600) if on else None,
-                     'link': None})
+                     'link': None, 'level': LEVELS.get(k) if on else None})
     return {'at': iso(age), 'indicators': inds}
 
 
@@ -38,6 +41,7 @@ FIXTURES = {
     'none': doc(40),
     'two': doc(40, {'production': 'wintest unreachable', 'pr_waiting': '2 PRs, oldest 31h'}),
     'stale': doc(25 * 60, {'production': 'health check failed twice'}),
+    'red': doc(40, {'priority_blocked': 'DWT: approve S8 wording', 'spend': '$88 of $250, $28/day'}),
 }
 
 
@@ -54,7 +58,7 @@ class Attention(unittest.TestCase):
         self.assertEqual(A.lit_leds(st, m), {1, m['pr_waiting']})
         f = A.frame(5.0, st, m)
         self.assertEqual([i for i, c in enumerate(f) if c != (0, 0, 0)], sorted({1, m['pr_waiting']}))
-        self.assertEqual(f[1], A.LIT)
+        self.assertEqual(f[1], A.LEVEL_LED['yellow'])          # colour follows the indicator's level
 
     def test_stale_blinks_all_mapped_white(self):
         for obj in (FIXTURES['stale'], None):

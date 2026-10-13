@@ -34,6 +34,20 @@ class LedBrightness(unittest.TestCase):
         self.assertEqual(d.saved['led_brightness_pct'], 50)
         self.assertIsNone(d._leds_last)          # forces the next frame to be re-sent
 
+    def test_up_down_step_and_stop_at_ends(self):
+        d = stub(25)
+        seen = []
+        for a in ('led_brightness_up', 'led_brightness_up', 'led_brightness_up', 'led_brightness_down',
+                  'led_brightness_down', 'led_brightness_down', 'led_brightness_down'):
+            D.Daemon.action(d, a)
+            seen.append(d.cfg['led_brightness_pct'])
+        self.assertEqual(seen, [50, 100, 100, 50, 25, 10, 10])
+
+    def test_fn_up_down_drive_the_lights(self):
+        from dc32host import config as CF
+        self.assertEqual(CF.DEFAULTS['buttons']['fn+up.short'], 'led_brightness_up')
+        self.assertEqual(CF.DEFAULTS['buttons']['fn+down.short'], 'led_brightness_down')
+
     def test_explicit_percent(self):
         d = stub()
         D.Daemon.action(d, 'led_brightness:50')
