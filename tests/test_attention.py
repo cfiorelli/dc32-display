@@ -140,13 +140,13 @@ class Columns(unittest.TestCase):
 
     def test_tag_and_descriptor_share_a_baseline_and_size(self):
         boxes = []
-        A.render(A.load(write(FIXTURES['longest']), now=NOW), now=NOW, boxes=boxes)
+        A.render(A.load(write(FIXTURES['api']), now=NOW), now=NOW, boxes=boxes)
         pri = sorted((b for b in boxes if b[0] == 'right' and 150 < b[2] < 170), key=lambda b: b[1])   # priority_blocked descriptor row
-        self.assertEqual(len(pri), 3, pri)                       # label, tag, reason
-        _, tag, reason = pri
-        self.assertEqual(tag[4], reason[4])                      # same bottom: no descenders in "Ops"/"Wintest SAC", so the baseline
+        self.assertEqual(len(pri), 2, pri)                       # tag, reason (the label sits above)
+        tag, reason = pri
+        self.assertEqual(tag[4], reason[4])                      # same bottom: no descenders in "API"/"API on site", so the baseline
         self.assertGreaterEqual(reason[4] - reason[2], 10)       # taller than the old 11 px text
-        self.assertEqual(A.TAG_RGB['Ops'], (0xff, 0xaf, 0x5f))
+        self.assertEqual(A.TAG_RGB['API'], (0xff, 0x87, 0xd7))
 
     def test_recorded_boxes_stay_in_their_column(self):
         for name, obj in FIXTURES.items():
