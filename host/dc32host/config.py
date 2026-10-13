@@ -38,7 +38,7 @@ DEFAULTS = {
     "idle_clock_s": 0,                # show the drifting clock after this many idle seconds (0 = off)
     "dim_after_s": 600,               # dim the badge backlight after this long without PC/badge input (0 = never)
     "dim_brightness": 2,
-    "led_brightness_pct": 100,        # LED brightness 1..100 (%); `dc32host ctl led_brightness:25`
+    "led_brightness_pct": 25,         # LED brightness 1..100 (%); `dc32host ctl led_brightness:50`
     "tap_sleep": True,                # knock-knock on the badge (2 taps 0.3-1 s apart): sleep / wake
     "tap_threshold": 12,              # 1..127 x 16 mg (12 = 192 mg); lower = lighter taps count (fw >= 0.3)
     "level_rotate": 90,               # bubble level: rotate accel axes to the screen (0/90/180/270)
@@ -49,12 +49,10 @@ DEFAULTS = {
     "default_view": "runner",         # view at start-up: mirror | runner | report
     "attention_file": None,           # default ~/.cache/dc32-display/attention.json (written by another process)
     "attention_stale_s": 600,         # older data: all attention LEDs blink white and the report says STALE
-    # id -> LED index (0-8) and id -> report slot. Defaults in attention.py are UNCONFIRMED guesses:
-    # run `dc32host ctl leds_identify`, note which physical LED lights for each index, then set these.
-    "attention_leds": {"priority_blocked": 2, "production": 5, "test_machines": 6,
-                       "spend": 0, "capacity": 4, "pr_waiting": 3},
-    "attention_slots": {"priority_blocked": "right_top", "production": "right_middle", "test_machines": "right_low",
-                        "spend": "left_top", "capacity": "left_middle", "pr_waiting": "left_low"},
+    # id -> LED index (0-8) and id -> report slot; None = the defaults in attention.py (five front LEDs).
+    # If two lights look swapped, run `dc32host ctl leds_identify` and set these.
+    "attention_leds": None,
+    "attention_slots": None,
     "show_cursor": True,
     "mouse_moves_view": True,
     "flipper_mouse": True,            # Flipper view: mouse wheel/clicks go to the Flipper (keyboard always does)         # zoomed in: pushing the pointer near an edge glides the view (False: keys/D-pad only)

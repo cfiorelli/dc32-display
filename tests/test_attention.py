@@ -19,9 +19,8 @@ def iso(sec_ago):
 
 def doc(age, lit=()):
     inds = []
-    for i, (k, label) in enumerate([('priority_blocked', 'Priority blocked'), ('production', 'Production'),
-                                     ('test_machines', 'Test machines'), ('spend', 'Spend'),
-                                     ('capacity', 'Capacity'), ('pr_waiting', 'PR waiting')]):
+    for i, (k, label) in enumerate([('priority_blocked', 'Priority blocked'), ('production', 'Prod + tests'),
+                                     ('spend', 'Spend'), ('capacity', 'Capacity'), ('pr_waiting', 'PR waiting')]):
         on = k in lit
         inds.append({'id': k, 'label': label, 'lit': on, 'reason': lit[k] if on else '', 'since': iso(3 * 3600) if on else None,
                      'link': None})
@@ -37,7 +36,7 @@ def write(obj):
 
 FIXTURES = {
     'none': doc(40),
-    'two': doc(40, {'production': 'health check failed twice, HTTP 503', 'pr_waiting': '2 PRs waiting on you, oldest 31h'}),
+    'two': doc(40, {'production': 'wintest unreachable', 'pr_waiting': '2 PRs, oldest 31h'}),
     'stale': doc(25 * 60, {'production': 'health check failed twice'}),
 }
 
@@ -57,7 +56,7 @@ class Attention(unittest.TestCase):
         self.assertEqual([i for i, c in enumerate(f) if c != (0, 0, 0)], sorted({1, m['pr_waiting']}))
         self.assertEqual(f[1], A.LIT)
 
-    def test_stale_blinks_all_six_white(self):
+    def test_stale_blinks_all_mapped_white(self):
         for obj in (FIXTURES['stale'], None):
             st = A.load(write(obj) if obj else '/nonexistent/attention.json', now=NOW)
             self.assertTrue(st['stale'])
