@@ -48,7 +48,7 @@ FIXTURES = {
     'red': doc(40, {'priority_blocked': 'Demo task', 'spend': '$70/$80'}, {'priority_blocked': 'Lab'}, levels={'spend': 'red'}),
     # all five lit with the longest real strings (the live state on 2026-10-13 plus the longest short a writer can emit)
     'longest': doc(40, {'priority_blocked': 'Lab account', 'production': 'deskpc off', 'spend': '$70/$80',
-                        'capacity': 'Claude 17% left', 'pr_waiting': 'sample#1234'},
+                        'capacity': 'Claude bal: 17%', 'pr_waiting': 'sample#1234'},
                    {'priority_blocked': 'Ops', 'pr_waiting': 'Ops'}, levels={'spend': 'red', 'capacity': 'red', 'production': 'yellow'}),
     'api': doc(40, {'priority_blocked': 'API limits'}, {'priority_blocked': 'API'}),
     'notag': doc(40, {'priority_blocked': 'task-12'}, {'priority_blocked': 'Eng'}),
