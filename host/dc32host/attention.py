@@ -8,7 +8,8 @@ Each indicator owns one LED (config `attention_leds`: id -> LED index) and one s
 (config `attention_slots`: id -> "left_top" ... "right_low"). Lit = needs you, off = nothing for you.
 The badge has five front LEDs, placed around the screen as in fio's photo (2026-10-13): left top (beside the
 screen's top edge), left middle and right middle (beside its bottom edge), left low (D-pad) and right low (A/B).
-If the file is missing, unreadable or older than `attention_stale_s` (default 10 min), every mapped
+A lit LED pulses (slowly, off to the configured level and back) while an item behind it needs you and is solid when every item
+is being handled (`pulse` false); the count on screen does not drive the LED. If the file is missing, unreadable or older than `attention_stale_s` (default 10 min), every mapped
 LED blinks slowly white, so a dead writer never looks like "all fine".
 `dc32host ctl leds_identify` lights LED 0..8 in turn and shows the index, to confirm the mapping.
 """
@@ -16,6 +17,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import math
 import os
 from pathlib import Path
 
@@ -101,6 +103,36 @@ def frame(t, state, leds_map):
         idx = leds_map.get(i["id"])
         if i.get("lit") and idx is not None and 0 <= idx < N_LEDS:
             out[idx] = LEVEL_LED.get(i.get("level"), LIT)
+    return out
+
+
+PULSE_S = 2.0          # one pulse: off -> the configured level -> off
+PULSE_OFF_BELOW = 0.12
+
+
+def pulse_leds(state, leds_map):
+    """LED indices that pulse: lit lights with at least one item that needs fio (`pulse` true; missing = needs fio).
+    Empty when the data is stale (those blink white instead, see frame())."""
+    if state.get("stale", True):
+        return set()
+    return {leds_map[i["id"]] for i in state.get("indicators", []) if i.get("lit") and i.get("pulse", True) and i["id"] in leds_map}
+
+
+def pulse_env(t):
+    """0..1 raised cosine, PULSE_S long, starting and ending at 0 (fully off)."""
+    return (1 - math.cos(2 * math.pi * (t % PULSE_S) / PULSE_S)) / 2
+
+
+def apply_pulse(cols, idxs, t):
+    """Scale the pulsing LEDs of an already level-scaled frame by the envelope. The peak is exactly the configured
+    level, the trough is off; in between a lit channel stays at least 1 so a 1% level (peak value 2) still ramps."""
+    if not idxs:
+        return list(cols)
+    e = pulse_env(t)
+    out = list(cols)
+    for i in idxs:
+        if 0 <= i < len(out):
+            out[i] = (0, 0, 0) if e < PULSE_OFF_BELOW else tuple(max(1, int(v * e + 0.5)) if v else 0 for v in out[i])
     return out
 
 

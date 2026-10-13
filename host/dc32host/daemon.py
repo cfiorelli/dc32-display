@@ -309,6 +309,9 @@ class Daemon:
         # No idle dimming here: the idle dim is for the LCD backlight. The LEDs hold the level set with
         # the light-level controls, because quartering them made 1% round to off after 10 idle minutes.
         cols = scale_leds(cols, led_pct(self.cfg))
+        if self._identify is None and self.lights.mode == "attention":    # needs-you lights pulse after level scaling, so 1% still ramps
+            from . import attention as A
+            cols = A.apply_pulse(cols, A.pulse_leds(self.attention_state(), self.attention_leds()), now)
         if cols != self._leds_last:
             self._leds_last = cols
             self.send(P.set_leds(cols))
