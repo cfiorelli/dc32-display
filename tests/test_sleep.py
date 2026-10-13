@@ -88,7 +88,7 @@ class Sleep(unittest.TestCase):
 
     def test_help_number_keys(self):
         from dc32host.help_view import NUMBERED, KEYS
-        self.assertEqual(NUMBERED[:2], ['toggle_runner', 'flipper'])
+        self.assertEqual(NUMBERED[:2], ['toggle_report', 'flipper'])
         self.assertEqual(len(NUMBERED), len(KEYS))
         d = stub([0.0])
         views = []
