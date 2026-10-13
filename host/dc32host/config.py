@@ -36,7 +36,7 @@ DEFAULTS = {
     "max_frames_in_flight": 2,
     "brightness": 22,                 # 0..31
     "idle_clock_s": 0,                # show the drifting clock after this many idle seconds (0 = off)
-    "dim_after_s": 600,               # dim the badge backlight after this long without PC/badge input (0 = never)
+    "dim_after_s": 0,                 # dim the badge backlight after this long without PC/badge input (0 = never; the screen stays where you set it)
     "dim_brightness": 2,
     "led_brightness_pct": 25,         # LED brightness 1..100 (%); `dc32host ctl led_brightness:50`
     "tap_sleep": True,                # knock-knock on the badge (2 taps 0.3-1 s apart): sleep / wake
