@@ -23,25 +23,24 @@ class LedBrightness(unittest.TestCase):
         self.assertEqual(D.led_pct({'led_brightness_pct': 'junk'}), 25)
         self.assertEqual(D.led_pct({'led_brightness_pct': 0}), 1)
 
-    def test_step_cycles_100_50_25_10(self):
+    def test_step_cycles_down_through_every_level(self):
         d = stub()
         d.cfg['led_brightness_pct'] = 100
         seen = []
         for _ in range(5):
             D.Daemon.action(d, 'led_brightness')
             seen.append(d.cfg['led_brightness_pct'])
-        self.assertEqual(seen, [50, 25, 10, 100, 50])
-        self.assertEqual(d.saved['led_brightness_pct'], 50)
+        self.assertEqual(seen, [50, 25, 10, 5, 2])
+        self.assertEqual(d.saved['led_brightness_pct'], 2)        # the last step is what gets saved
         self.assertIsNone(d._leds_last)          # forces the next frame to be re-sent
 
     def test_up_down_step_and_stop_at_ends(self):
         d = stub(25)
         seen = []
-        for a in ('led_brightness_up', 'led_brightness_up', 'led_brightness_up', 'led_brightness_down',
-                  'led_brightness_down', 'led_brightness_down', 'led_brightness_down'):
+        for a in ['led_brightness_up'] * 3 + ['led_brightness_down'] * 8:
             D.Daemon.action(d, a)
             seen.append(d.cfg['led_brightness_pct'])
-        self.assertEqual(seen, [50, 100, 100, 50, 25, 10, 10])
+        self.assertEqual(seen, [50, 100, 100, 50, 25, 10, 5, 2, 1, 1, 1])
 
     def test_fn_up_down_drive_the_lights(self):
         from dc32host import config as CF

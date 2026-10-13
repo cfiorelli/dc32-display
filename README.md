@@ -35,7 +35,7 @@ Both are drawn natively at the badge's 320×240 (shown here at 2×; the runner v
 | **START** hold | pin the app currently shown |
 | **D-pad** | move the zoomed view. It never sends keys to the PC |
 | **FN + B** | info overlay: mode, app, FPS, throughput, latency, versions |
-| **FN + Up/Down** | brightness |
+| **FN + Up/Down** | light level up/down: 1, 2, 5, 10, 25, 50, 100% (default 25%; screen brightness is in the FN menu) |
 | **FN + START + SELECT** hold 2 s | reboot into the USB bootloader (for re-flashing) |
 
 Typing while in fit mode zooms to 1:1 around the caret and stays there until **B**. Only screen
@@ -52,8 +52,10 @@ All mappings live in `~/.config/dc32-display/config.json` (`"buttons"`).
 | Ctrl+Alt+H | cheat sheet of every shortcut, on the badge |
 | Ctrl+Alt+Z / Ctrl+Alt+X | zoom cycle / fit |
 | Ctrl+Alt+I / J / K / L | move the badge view up / left / down / right |
+| Ctrl+Alt+Up / Down | light level up / down (1-100%; the installer frees these two combos from GNOME's workspace up/down) |
+| Ctrl+Alt+G | next light mode (attention is the default) |
 
-Any action can be sent from a script: `dc32host ctl <action>` (e.g. `toggle_runner`, `toggle_report`, `leds_identify`, `home_menu`,
+Any action can be sent from a script: `dc32host ctl <action>` (e.g. `toggle_runner`, `toggle_report`, `leds_identify`, `led_brightness:25`, `home_menu`,
 `zoom_cycle`, `pan_left`, `toggle_pause`). `dc32host restart` restarts (or starts) the service.
 
 ## Setup (Ubuntu, X11 session)
@@ -190,27 +192,37 @@ Not affiliated with DEF CON.
 
 ## Attention lights and report
 
-Six of the LEDs show whether anything needs you. One light per thing; **off = nothing for you,
-lit (steady orange) = it needs you.** The light mode is `attention` (the default; Ctrl+Alt+G cycles
-the others). A separate process writes `~/.cache/dc32-display/attention.json`; the daemon only reads it:
+The badge's five front LEDs show whether anything needs you, one signal each; **off = nothing for you,
+lit = it needs you. Red = act now, yellow = heads-up.** Default level 25% (FN + Up/Down or Ctrl+Alt+Up/Down
+change it). The light mode is `attention` (the default; Ctrl+Alt+G cycles the others). A separate process
+writes `~/.cache/dc32-display/attention.json`; the daemon only reads it:
 
 ```json
 {"at": "2026-10-13T01:00:00Z",
- "indicators": [{"id": "production", "label": "Production", "lit": true,
-                 "reason": "health check failed twice", "since": "2026-10-13T00:40:00Z", "link": "https://..."}]}
+ "indicators": [{"id": "spend", "label": "CI spend", "lit": true, "level": "yellow",
+                 "reason": "$70 of $80, $7/day", "since": "2026-10-13T00:40:00Z", "link": "https://..."}]}
 ```
 
-If the file is missing, unreadable, or older than `attention_stale_s` (10 min), **all six lights blink
-slowly white** and the report header reads STALE, so a dead writer never looks like "all fine".
+| LED (around the screen) | Signal | Red | Yellow |
+|---|---|---|---|
+| left top | CI spend (GitHub Actions) | 80%+ of the monthly budget used | on pace to pass the budget this month |
+| left middle | AI usage (Claude / Codex plans) | | queued work can't start because of plan limits |
+| left low (D-pad) | PR waiting | | a PR has waited on you 24h+ |
+| right middle | Priority blocked | a priority can't move until you act | |
+| right low (A/B) | Prod + tests | production health failing | a test machine unreachable 10+ min |
 
-The **report** (Ctrl+Alt+B toggles it with the runner cost view, which is the start-up view) draws each
-indicator on the side and at the height of its LED with an arrow toward it; lit ones show the reason and
-age. Mirroring stays reachable: **B**, or FN > Mirror screen, or the command menu (Ctrl+Alt+M).
+If the file is missing, unreadable, or older than `attention_stale_s` (10 min), **all the lights blink
+slowly white** and the report reads STALE, so a dead writer never looks like "all fine".
 
-Config (`config.json`): `attention_leds` maps id -> LED index (0-8), `attention_slots` maps id -> screen
-slot (`right_top`, `right_middle`, `right_low`, `left_top`, `left_middle`, `left_low`), plus `attention_file`,
-`attention_stale_s`, `default_view`. The shipped indices are a guess from the firmware's button zones. Confirm
-them: `dc32host ctl leds_identify` lights LED 0..8 for 3 s each and shows the number on screen; set
-`attention_leds` to what you see. Calling it again stops it.
+The **report** (Ctrl+Alt+B toggles it with the runner cost view, which is the start-up view) is drawn in
+the badge's style: each signal sits beside its LED with a circuit trace running to it, lit ones show a one-line
+reason and how long, and the centre shows how many need you. Mirroring stays reachable: **B**, or FN > Mirror
+screen, or the command menu (Ctrl+Alt+M).
 
-![Report: nothing lit](docs/img/attention-none.png) ![Report: two lit](docs/img/attention-two.png) ![Report: stale](docs/img/attention-stale.png)
+Config (`config.json`): `attention_leds` maps id -> LED index (0-8) and `attention_slots` maps id -> slot
+(`left_top`, `left_middle`, `left_low`, `right_middle`, `right_low`); unset means the defaults above, plus
+`attention_file`, `attention_stale_s`, `led_brightness_pct`, `default_view`. Left top and left middle (LED 0
+and 2) are inferred; if two look swapped, `dc32host ctl leds_identify` lights LED 0..8 for 3 s each with the
+number on screen, then set `attention_leds`. Calling it again stops it.
+
+![Report: nothing lit](docs/img/attention-none.png) ![Report: red and yellow](docs/img/attention-red.png) ![Report: stale](docs/img/attention-stale.png)

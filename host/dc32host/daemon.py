@@ -80,7 +80,7 @@ class Stats:
 
 
 
-LED_STEPS = (100, 50, 25, 10)
+LED_STEPS = (100, 50, 25, 10, 5, 2, 1)
 
 
 def led_pct(cfg) -> int:
@@ -662,7 +662,7 @@ class Daemon:
             log.info("rebooting the badge into BOOTSEL")
             self.send(P.reboot(bootsel=True))
         elif name in ("led_brightness", "led_brightness_up", "led_brightness_down") or name.startswith("led_brightness:"):
-            # LED (not screen) brightness. `led_brightness` steps 100 -> 50 -> 25 -> 10 -> 100;
+            # LED (not screen) brightness. `led_brightness` steps 100 -> 50 -> 25 -> 10 -> 5 -> 2 -> 1 -> 100;
             # `_up` / `_down` (FN + up/down, Ctrl+Alt+Up/Down) move one step and stop at the ends;
             # `led_brightness:<1-100>` sets a percent. Saved, so it survives a restart.
             arg = name.partition(":")[2]

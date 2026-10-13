@@ -14,7 +14,7 @@
 #   Ctrl+Alt+O        bubble level (accelerometer, fw >= 0.4.1)
 #   Ctrl+Alt+Y        keyboard -> badge view (Flipper / spectrum / bench) and back; off on every view change
 #   Ctrl+Alt+S        sleep: backlight off until any keyboard/mouse/badge input
-#   Ctrl+Alt+Up/Down  lights brighter / dimmer (10, 25, 50, 100%); frees GNOME's workspace up/down on them
+#   Ctrl+Alt+Up/Down  lights brighter / dimmer (1, 2, 5, 10, 25, 50, 100%); frees GNOME's workspace up/down on them
 #   Ctrl+Alt+G        next light mode (off, bright, wave, rainbow, rave, runner status, needs-you)
 #   Ctrl+Alt+Z        zoom: fit -> 2:1 -> 1:1        (B on the badge / Ctrl+Alt+X: back to fit)
 #   Ctrl+Alt+I/J/K/L  move the badge view up/left/down/right (when zoomed)
