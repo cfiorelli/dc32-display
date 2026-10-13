@@ -48,7 +48,7 @@ FIXTURES = {
     'red': doc(40, {'priority_blocked': 'Sec call', 'spend': '$210/$250'}, {'priority_blocked': 'DWT'}, levels={'spend': 'red'}),
     # all five lit with the longest real strings (the live state on 2026-10-13 plus the longest short a writer can emit)
     'longest': doc(40, {'priority_blocked': 'Wintest SAC', 'production': 'testmac off', 'spend': '$210/$250',
-                        'capacity': 'Claude 83%', 'pr_waiting': 'engine#2055'},
+                        'capacity': 'Claude 17% left', 'pr_waiting': 'engine#2055'},
                    {'priority_blocked': 'Ops', 'pr_waiting': 'Ops'}, levels={'spend': 'red', 'capacity': 'red', 'production': 'yellow'}),
     'api': doc(40, {'priority_blocked': 'API on site'}, {'priority_blocked': 'API'}),
     'notag': doc(40, {'priority_blocked': 'fq-13'}, {'priority_blocked': 'Eng'}),
@@ -137,6 +137,16 @@ class Columns(unittest.TestCase):
             # and across rows: no left text pixel within 8 px of ANY right text pixel, so a taller glyph cannot clip either
             if left.any() and right.any():
                 self.assertGreaterEqual(np.flatnonzero(right.any(axis=0)).min() - np.flatnonzero(left.any(axis=0)).max(), 8, name)
+
+    def test_tag_and_descriptor_share_a_baseline_and_size(self):
+        boxes = []
+        A.render(A.load(write(FIXTURES['api']), now=NOW), now=NOW, boxes=boxes)
+        pri = sorted((b for b in boxes if b[0] == 'right' and 150 < b[2] < 170), key=lambda b: b[1])   # priority_blocked descriptor row
+        self.assertEqual(len(pri), 2, pri)                       # tag, reason (the label sits above)
+        tag, reason = pri
+        self.assertEqual(tag[4], reason[4])                      # same bottom: no descenders in "API"/"API on site", so the baseline
+        self.assertGreaterEqual(reason[4] - reason[2], 10)       # taller than the old 11 px text
+        self.assertEqual(A.TAG_RGB['API'], (0xff, 0x87, 0xd7))
 
     def test_recorded_boxes_stay_in_their_column(self):
         for name, obj in FIXTURES.items():
