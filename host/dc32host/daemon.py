@@ -110,7 +110,7 @@ class Daemon:
         self.on_frame_acked = None    # (frame_id, t_ack)
         self._ex_title = [re.compile(p) for p in cfg.get("exclude_titles", [])]
         self._ex_proc = {p.lower() for p in cfg.get("exclude_processes", [])}
-        self.view = "mirror"          # mirror | runner | paused | help
+        self.view = cfg.get("default_view") or "mirror"   # mirror | runner | report | paused | help ...
         self.prev_view = "mirror"
         self.runner = None            # lazily created runner_view.RunnerView
         self._runner_img = (0.0, None)
@@ -123,6 +123,8 @@ class Daemon:
         self._heartbeat_started = False
         from .lights import Lights
         self.lights = Lights(cfg.get("lights_mode", "off"))
+        self._att = (0.0, None)         # (read at, attention.load() result)
+        self._identify = None           # start time of a running `leds_identify`, else None
         self._leds_last = None
         self._leds_t = 0.0
         self.last_badge_input = time.time()
@@ -278,12 +280,37 @@ class Daemon:
                 loc = self._runner().data.snapshot()[1]
             except Exception:
                 loc = {}
-        cols = self.lights.frame(now, loc)
+        if self._identify is not None:
+            from . import attention as A
+            cols, idx = A.identify_frame(self._identify, now)
+            if idx is None:
+                self.stop_identify()
+        else:
+            cols = self.lights.frame(now, loc, self.attention_state(), self.attention_leds())
         if self.dimmed:
             cols = [tuple(v // 4 for v in c) for c in cols]
         if cols != self._leds_last:
             self._leds_last = cols
             self.send(P.set_leds(cols))
+
+    def attention_state(self):
+        from . import attention as A
+        t, st = self._att
+        if st is None or time.time() - t > 1.0:
+            st = A.load(self.cfg.get("attention_file") or A.PATH,
+                        stale_s=float(self.cfg.get("attention_stale_s", A.STALE_S)))
+            self._att = (time.time(), st)
+        return st
+
+    def attention_leds(self):
+        from . import attention as A
+        return self.cfg.get("attention_leds") or A.DEFAULT_LEDS
+
+    def stop_identify(self):
+        self._identify = None
+        self._leds_last = None
+        if self.view == "identify":
+            self.set_view(self.prev_view if self.prev_view != "identify" else "mirror")
 
     def run_control(self):
         while True:
@@ -430,6 +457,19 @@ class Daemon:
             self.open_home()
         elif name in ("view_runner", "toggle_runner"):
             self.set_view("mirror" if (name == "toggle_runner" and self.view == "runner") else "runner")
+        elif name in ("view_report", "toggle_report"):   # Ctrl+Alt+B: runner costs <-> needs-you report
+            if name == "view_report":
+                self.set_view("report")
+            else:
+                self.set_view("report" if self.view == "runner" else "runner")
+        elif name == "leds_identify":      # light LED 0..8 in turn and show its index (confirms attention_leds)
+            if self._identify is not None:
+                self.stop_identify()
+            else:
+                self.prev_view = self.view
+                self._identify = time.time()
+                self._leds_last = None
+                self.set_view("identify")
         elif name in ("view_mirror", "resume"):
             self.set_view("mirror")
         elif name.startswith("helpkey:"):  # a number (or Esc) pressed while the cheat sheet is up
@@ -662,7 +702,7 @@ class Daemon:
             self.say({"mirror": "Mirroring screen", "runner": "Runner costs", "paused": "Display paused",
                       "ir": "IR scope", "flipper": "Flipper", "sdr": "Spectrum (SDR)",
                       "bench": "RF bench", "sys": "System monitor", "clock": "Clock",
-                      "level": "Level"}[view],
+                      "level": "Level", "report": "Needs-you report", "identify": "LED identify"}[view],
                      "Ctrl+Alt+Y: keyboard -> badge" if view in self.KEYBOARD_VIEWS
                      else "FN: menu" if view != "mirror" else "")
         self.vp.reset()
@@ -788,6 +828,7 @@ class Daemon:
         items = [
             ("Mirror screen", "view_mirror", self.view == "mirror"),
             ("Runner costs", "view_runner", self.view == "runner"),
+            ("Needs-you report", "view_report", self.view == "report"),
             ("Badge terminal", "badge_terminal", bool(self.shown and self.shown.title == "Badge Terminal")),
             ("Switch app...", "app_switcher", False),
             (f"Zoom: {self.vp.zoom} (A cycles)", "zoom_cycle", False),
@@ -1009,6 +1050,13 @@ class Daemon:
             return time.time(), C.placeholder(["Display paused", "FN: menu  |  FN > Resume"]), False
         if self.view == "runner":
             return time.time(), self.runner_frame(), False
+        if self.view == "report":
+            from . import attention as A
+            return time.time(), A.render(self.attention_state(), self.cfg.get("attention_slots")), False
+        if self.view == "identify":
+            from . import attention as A
+            idx = A.identify_frame(self._identify, time.time())[1] if self._identify is not None else None
+            return time.time(), A.render_identify(idx), False
         if self.view == "help":
             from . import help_view
             return time.time(), help_view.render(getattr(self, "help_page", 0)), False

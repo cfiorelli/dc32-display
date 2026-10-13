@@ -48,12 +48,12 @@ All mappings live in `~/.config/dc32-display/config.json` (`"buttons"`).
 
 | Keys | Action |
 |---|---|
-| Ctrl+Alt+B | runner cost view ↔ screen mirroring |
+| Ctrl+Alt+B | runner cost view ↔ needs-you report (screen mirroring: FN menu or **B**) |
 | Ctrl+Alt+H | cheat sheet of every shortcut, on the badge |
 | Ctrl+Alt+Z / Ctrl+Alt+X | zoom cycle / fit |
 | Ctrl+Alt+I / J / K / L | move the badge view up / left / down / right |
 
-Any action can be sent from a script: `dc32host ctl <action>` (e.g. `toggle_runner`, `home_menu`,
+Any action can be sent from a script: `dc32host ctl <action>` (e.g. `toggle_runner`, `toggle_report`, `leds_identify`, `home_menu`,
 `zoom_cycle`, `pan_left`, `toggle_pause`). `dc32host restart` restarts (or starts) the service.
 
 ## Setup (Ubuntu, X11 session)
@@ -187,3 +187,30 @@ RESTORE.md  how to put the badge back exactly as it was
 
 MIT (see `LICENSE`), except the Unifont-derived glyph data in `firmware/src/font8x16.h` (OFL-1.1).
 Not affiliated with DEF CON.
+
+## Attention lights and report
+
+Six of the LEDs show whether anything needs you. One light per thing; **off = nothing for you,
+lit (steady orange) = it needs you.** The light mode is `attention` (the default; Ctrl+Alt+G cycles
+the others). A separate process writes `~/.cache/dc32-display/attention.json`; the daemon only reads it:
+
+```json
+{"at": "2026-10-13T01:00:00Z",
+ "indicators": [{"id": "production", "label": "Production", "lit": true,
+                 "reason": "health check failed twice", "since": "2026-10-13T00:40:00Z", "link": "https://..."}]}
+```
+
+If the file is missing, unreadable, or older than `attention_stale_s` (10 min), **all six lights blink
+slowly white** and the report header reads STALE, so a dead writer never looks like "all fine".
+
+The **report** (Ctrl+Alt+B toggles it with the runner cost view, which is the start-up view) draws each
+indicator on the side and at the height of its LED with an arrow toward it; lit ones show the reason and
+age. Mirroring stays reachable: **B**, or FN > Mirror screen, or the command menu (Ctrl+Alt+M).
+
+Config (`config.json`): `attention_leds` maps id -> LED index (0-8), `attention_slots` maps id -> screen
+slot (`right_top`, `right_middle`, `right_low`, `left_top`, `left_middle`, `left_low`), plus `attention_file`,
+`attention_stale_s`, `default_view`. The shipped indices are a guess from the firmware's button zones. Confirm
+them: `dc32host ctl leds_identify` lights LED 0..8 for 3 s each and shows the number on screen; set
+`attention_leds` to what you see. Calling it again stops it.
+
+![Report: nothing lit](docs/img/attention-none.png) ![Report: two lit](docs/img/attention-two.png) ![Report: stale](docs/img/attention-stale.png)
