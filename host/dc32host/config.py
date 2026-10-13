@@ -96,8 +96,8 @@ DEFAULTS = {
         "down.down": "pan_down", "down.repeat": "pan_down",
         "left.down": "pan_left", "left.repeat": "pan_left",
         "right.down": "pan_right", "right.repeat": "pan_right",
-        "fn+up.short": "brightness_up",
-        "fn+down.short": "brightness_down",
+        "fn+up.short": "led_brightness_up",      # lights brighter (screen brightness: FN menu)
+        "fn+down.short": "led_brightness_down",  # lights dimmer
         "fn+left.short": "none",       # e.g. "key:left" to inject arrow keys (disabled by default)
         "fn+right.short": "none",
         "fn+a.short": "focus_shown",

@@ -25,7 +25,11 @@ from .runner_view import BG, INK, INK2, MUTED, GRID, BAD, WARN, OK, _ttf
 
 PATH = Path.home() / ".cache" / "dc32-display" / "attention.json"
 STALE_S = 600
-LIT = (255, 80, 0)                    # one steady colour for "needs you"
+LIT = (255, 80, 0)                    # lit with no level given (older writers)
+# red = act now, yellow = heads-up. LED values are tuned for the WS2812s; screen values for the LCD.
+LEVEL_LED = {"red": (255, 0, 0), "yellow": (255, 150, 0)}
+LEVEL_SCREEN = {"red": (255, 56, 56), "yellow": (255, 196, 0)}
+LEVEL_GLOW = {"red": (90, 0, 0), "yellow": (88, 60, 0)}
 STALE_RGB = (255, 255, 255)
 # Default mapping from the firmware's front LEDs (0,2,4,5,6) and its button zones (4 = D-pad, left low;
 # 5 = A/B, right low; 6 = START/SELECT, right middle). 0 and 2 (left top / left middle) are UNCONFIRMED:
@@ -36,7 +40,7 @@ DEFAULT_SLOTS = {"spend": "left_top", "capacity": "left_middle", "pr_waiting": "
 SLOT_ORDER = ["left_top", "left_middle", "left_low", "right_middle", "right_low"]
 # Where each slot sits on the 320x240 screen: label y, and the arrow toward its LED (point, direction).
 # Top LED is beside the screen's top edge; middle LEDs beside its bottom edge; low LEDs below the screen.
-SLOT_Y = {"top": 6, "middle": 166, "low": 204}
+SLOT_Y = {"top": 8, "middle": 140, "low": 204}
 IDENTIFY_S = 3.0
 N_LEDS = 9
 
@@ -79,9 +83,10 @@ def frame(t, state, leds_map):
                 if 0 <= idx < N_LEDS:
                     out[idx] = STALE_RGB
         return out
-    for idx in lit_leds(state, leds_map):
-        if 0 <= idx < N_LEDS:
-            out[idx] = LIT
+    for i in state["indicators"]:
+        idx = leds_map.get(i["id"])
+        if i.get("lit") and idx is not None and 0 <= idx < N_LEDS:
+            out[idx] = LEVEL_LED.get(i.get("level"), LIT)
     return out
 
 
@@ -149,63 +154,140 @@ def _wrap(d, text, font, width, lines):
     return [_fit(d, l, font, width) for l in out]
 
 
-def _arrow(d, side, row, fill):
-    """Arrow at the screen edge pointing at the LED: sideways for top/middle, diagonally down for low."""
-    W, H = C.OUT_W, C.OUT_H
-    if row == "low":
-        if side == "left":
-            pts = [(2, H - 2), (14, H - 2), (2, H - 14)]
-        else:
-            pts = [(W - 3, H - 2), (W - 15, H - 2), (W - 3, H - 14)]
+# Badge theme (DEF CON 32 "HUMAN" badge: violet PCB, neon cyan screen frame, magenta traces).
+TH_BG = (16, 7, 26)
+TH_PCB = (40, 18, 58)          # faint background traces
+TH_TRACE = (78, 44, 108)       # an indicator's trace when clear
+TH_CYAN = (92, 214, 255)
+TH_MAGENTA = (255, 64, 196)
+TH_VIOLET = (164, 132, 196)    # clear labels
+TH_DIM = (98, 74, 128)
+TH_GLOW = (96, 30, 0)          # under a lit trace
+
+# Faint PCB traces behind everything: (polyline, via at end?)
+_PCB = [
+    ([(60, 44), (60, 60), (76, 76), (118, 76)], True), ([(320, 52), (292, 52), (276, 68), (276, 96)], True),
+    ([(0, 108), (30, 108), (44, 94), (88, 94)], True), ([(320, 124), (270, 124), (256, 110), (232, 110)], True),
+    ([(150, 240), (150, 222), (166, 206), (166, 186)], True), ([(110, 186), (124, 172), (196, 172), (210, 186)], False),
+    ([(40, 240), (40, 232), (58, 214)], False), ([(280, 240), (280, 232), (262, 214)], False),
+]
+
+# Each slot: the trace from its pad to the screen edge nearest the LED (left side; mirrored for right).
+_TRACES = {
+    "top": [(16, 15), (4, 15)],
+    "middle": [(16, 147), (9, 147), (9, 180), (3, 186)],
+    "low": [(16, 211), (9, 211), (9, 228), (3, 234)],
+}
+
+
+def _mirror(pts):
+    return [(C.OUT_W - 1 - x, y) for x, y in pts]
+
+
+def _via(d, xy, r, col, fill=None):
+    x, y = xy
+    d.ellipse([x - r, y - r, x + r, y + r], outline=col, fill=fill, width=1)
+
+
+def _background(d):
+    for pts, via in _PCB:
+        d.line(pts, fill=TH_PCB, width=2, joint="curve")
+        if via:
+            _via(d, pts[-1], 3, TH_PCB)
+    # screen-frame corner brackets, like the badge's own screen art
+    for (x, y, dx, dy) in ((4, 4, 1, 1), (C.OUT_W - 5, 4, -1, 1), (4, C.OUT_H - 5, 1, -1),
+                           (C.OUT_W - 5, C.OUT_H - 5, -1, -1)):
+        d.line([(x, y + dy * 10), (x, y), (x + dx * 10, y)], fill=(48, 70, 110), width=1)
+
+
+def _trace(d, side, row, lit, stale, col=LIT, glow=TH_GLOW):
+    pts = _TRACES[row] if side == "left" else _mirror(_TRACES[row])
+    if lit:
+        d.line(pts, fill=glow, width=6, joint="curve")
+        d.line(pts, fill=col, width=2, joint="curve")
+        end = pts[-1]
+        d.ellipse([end[0] - 3, end[1] - 3, end[0] + 3, end[1] + 3], fill=col)
     else:
-        ay = {"top": 13, "middle": 190}[row]
-        ax, step = (3, 1) if side == "left" else (W - 4, -1)
-        pts = [(ax, ay), (ax + step * 9, ay - 6), (ax + step * 9, ay + 6)]
-    d.polygon(pts, fill=fill)
+        d.line(pts, fill=(120, 120, 130) if stale else TH_TRACE, width=1, joint="curve")
+        _via(d, pts[-1], 2, (120, 120, 130) if stale else TH_TRACE)
 
 
 def render(state, slots_map=None, now=None):
-    """320x240 report: each indicator beside its LED with an arrow pointing at it; one short line each."""
+    """320x240 report in the badge's style: each signal beside its LED, a PCB trace running to it."""
     slots_map = {k: v for k, v in (slots_map or DEFAULT_SLOTS).items() if v in SLOT_ORDER}
     now = now or dt.datetime.now(dt.timezone.utc)
-    img = Image.new("RGB", (C.OUT_W, C.OUT_H), BG)
+    img = Image.new("RGB", (C.OUT_W, C.OUT_H), TH_BG)
     d = ImageDraw.Draw(img)
-    f_t, f_l, f_s = _ttf(15, bold=True), _ttf(13, bold=True), _ttf(11)
-    title = "Needs you"                        # top right: there is no LED there
-    d.text((C.OUT_W - 8 - d.textlength(title, font=f_t), 6), title, font=f_t, fill=INK)
-    if state["stale"]:
-        tag = "STALE " + _age(state["age"]) if state["age"] is not None else "STALE no data"
-        col = BAD
-    else:
-        tag, col = "data " + _age(state["age"]), MUTED
-    d.text((C.OUT_W - 8 - d.textlength(tag, font=f_s), 25), tag, font=f_s, fill=col)
-    hint = "Ctrl+Alt+B runner · FN menu · B mirror"
-    d.text(((C.OUT_W - d.textlength(hint, font=f_s)) / 2, 112), hint, font=f_s, fill=GRID)
+    _background(d)
+    f_t, f_l, f_s, f_big = _ttf(13, bold=True), _ttf(13, bold=True), _ttf(11), _ttf(44, bold=True)
+    stale = state["stale"]
     by_slot = {}
     for n, i in enumerate(state["indicators"]):
         s = slots_map.get(i["id"]) or (SLOT_ORDER[n] if n < len(SLOT_ORDER) and not slots_map else None)
         if s and s not in by_slot:
             by_slot[s] = i
-    colw = 136
+    lits = [i for i in by_slot.values() if i.get("lit")] if not stale else []
+    n_lit = len(lits)
+    worst = "red" if any(i.get("level") == "red" for i in lits) else ("yellow" if lits else None)
+    # title, top right (no LED there)
+    title = "N E E D S   Y O U"
+    tw = d.textlength(title, font=f_t)
+    d.text((C.OUT_W - 12 - tw, 9), title, font=f_t, fill=TH_CYAN)
+    d.line([(C.OUT_W - 12 - tw, 27), (C.OUT_W - 12, 27)], fill=TH_MAGENTA, width=1)
+    if stale:
+        tag, col = ("STALE " + _age(state["age"])) if state["age"] is not None else "STALE  no data", BAD
+    else:
+        tag, col = "data " + _age(state["age"]), TH_DIM
+    d.text((C.OUT_W - 12 - d.textlength(tag, font=f_s), 31), tag, font=f_s, fill=col)
+    # centre: how many need you
+    big = "?" if stale else str(n_lit)
+    bw = d.textlength(big, font=f_big)
+    bc = (200, 200, 210) if stale else (LEVEL_SCREEN.get(worst, LIT) if n_lit else TH_CYAN)
+    d.text(((C.OUT_W - bw) / 2, 58), big, font=f_big, fill=bc)
+    sub = "data is old" if stale else ("need you" if n_lit > 1 else "needs you" if n_lit == 1 else "all clear")
+    d.text(((C.OUT_W - d.textlength(sub, font=f_s)) / 2, 108), sub, font=f_s, fill=TH_VIOLET)
+    # legend: what the two colours mean
+    parts = [("●", LEVEL_SCREEN["red"]), (" act now    ", TH_DIM), ("●", LEVEL_SCREEN["yellow"]), (" heads-up", TH_DIM)]
+    lw = sum(d.textlength(t, font=f_s) for t, _ in parts)
+    lx = (C.OUT_W - lw) / 2
+    for t, c in parts:
+        d.text((lx, 124), t, font=f_s, fill=c)
+        lx += d.textlength(t, font=f_s)
+    colw = 150
     for s, ind in by_slot.items():
         side, row = s.split("_")
-        x = 18 if side == "left" else C.OUT_W - 18 - colw
         y = SLOT_Y[row]
-        lit = bool(ind.get("lit")) and not state["stale"]
-        _arrow(d, side, row, LIT if lit else GRID)
+        lit = bool(ind.get("lit")) and not stale
+        col = LEVEL_SCREEN.get(ind.get("level"), LIT)
+        _trace(d, side, row, lit, stale, col, LEVEL_GLOW.get(ind.get("level"), TH_GLOW))
+        pad = (16, y + 7) if side == "left" else (C.OUT_W - 17, y + 7)
+        if lit:
+            d.ellipse([pad[0] - 4, pad[1] - 4, pad[0] + 4, pad[1] + 4], fill=col)
+        else:
+            _via(d, pad, 3, TH_VIOLET if not stale else (150, 150, 160))
         label = ind.get("label") or ind["id"].replace("_", " ")
         age_s = ""
         if lit:
             since = _parse(ind.get("since"))
             age_s = _age((now - since).total_seconds()) if since else ""
         aw = d.textlength(age_s, font=f_s) + 6 if age_s else 0
-        d.ellipse([x, y + 3, x + 9, y + 12], fill=LIT if lit else None, outline=LIT if lit else GRID)
-        d.text((x + 14, y), _fit(d, label, f_l, colw - 14 - aw), font=f_l, fill=INK if lit else MUTED)
-        if age_s:
-            d.text((x + colw - aw + 6, y + 1), age_s, font=f_s, fill=WARN)
+        label = _fit(d, label, f_l, colw - aw)
         if lit:
-            d.text((x + 14, y + 16), _fit(d, ind.get("reason") or "", f_s, colw - 14), font=f_s, fill=INK2)
+            line2, c2 = _fit(d, ind.get("reason") or "", f_s, colw), col
         else:
-            d.text((x + 14, y + 16), "clear" if not state["stale"] else "unknown", font=f_s,
-                   fill=GRID if not state["stale"] else MUTED)
+            line2, c2 = ("clear" if not stale else "unknown"), TH_DIM
+        # left column reads from its LED inward; the right column is right-aligned against its LED
+        if side == "left":
+            x0 = 22
+            d.text((x0, y), label, font=f_l, fill=INK if lit else TH_VIOLET)
+            if age_s:
+                d.text((x0 + d.textlength(label, font=f_l) + 6, y + 1), age_s, font=f_s, fill=TH_MAGENTA)
+            d.text((x0, y + 16), line2, font=f_s, fill=c2)
+        else:
+            xr = C.OUT_W - 22
+            lwid = d.textlength(label, font=f_l)
+            d.text((xr - lwid, y), label, font=f_l, fill=INK if lit else TH_VIOLET)
+            if age_s:
+                d.text((xr - lwid - aw, y + 1), age_s, font=f_s, fill=TH_MAGENTA)
+            d.text((xr - d.textlength(line2, font=f_s), y + 16), line2, font=f_s, fill=c2)
     return np.asarray(img).copy()

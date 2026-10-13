@@ -14,6 +14,7 @@
 #   Ctrl+Alt+O        bubble level (accelerometer, fw >= 0.4.1)
 #   Ctrl+Alt+Y        keyboard -> badge view (Flipper / spectrum / bench) and back; off on every view change
 #   Ctrl+Alt+S        sleep: backlight off until any keyboard/mouse/badge input
+#   Ctrl+Alt+Up/Down  lights brighter / dimmer (10, 25, 50, 100%); frees GNOME's workspace up/down on them
 #   Ctrl+Alt+G        next light mode (off, bright, wave, rainbow, rave, runner status, needs-you)
 #   Ctrl+Alt+Z        zoom: fit -> 2:1 -> 1:1        (B on the badge / Ctrl+Alt+X: back to fit)
 #   Ctrl+Alt+I/J/K/L  move the badge view up/left/down/right (when zoomed)
@@ -36,6 +37,8 @@ KEYS=(
   "dc32-level|DC32 badge: bubble level (accelerometer)|<Primary><Alt>o|level"
   "dc32-keyboard|DC32 badge: hand the keyboard to the badge view / back|<Primary><Alt>y|keyboard"
   "dc32-lights|DC32 badge: next light mode|<Primary><Alt>g|lights_next"
+  "dc32-lights-up|DC32 badge: lights brighter|<Primary><Alt>Up|led_brightness_up"
+  "dc32-lights-down|DC32 badge: lights dimmer|<Primary><Alt>Down|led_brightness_down"
   "dc32-sleep|DC32 badge: sleep (screen off, any input wakes)|<Primary><Alt>s|sleep"
   "dc32-zoom|DC32 badge: zoom|<Primary><Alt>z|zoom_cycle"
   "dc32-fit|DC32 badge: fit whole window|<Primary><Alt>x|zoom_fit"
@@ -56,6 +59,21 @@ print(keep if mode == "--remove" else keep + ours)
 PY
 )
 gsettings set $SCHEMA custom-keybindings "$new"
+# GNOME binds Ctrl+Alt+Up/Down to workspace up/down, which would swallow the light shortcuts. Take only those
+# two combos out of (or, on --remove, back into) the workspace bindings; anything else there is kept.
+WM=org.gnome.desktop.wm.keybindings
+for pair in "switch-to-workspace-up|<Control><Alt>Up" "switch-to-workspace-down|<Control><Alt>Down"; do
+  key=${pair%%|*}; combo=${pair#*|}
+  cur=$(gsettings get $WM "$key" 2>/dev/null) || continue
+  gsettings set $WM "$key" "$(python3 - "$cur" "$combo" "${1:-}" <<'PY'
+import ast, sys
+cur = ast.literal_eval(sys.argv[1].replace("@as ", ""))
+combo, mode = sys.argv[2], sys.argv[3]
+cur = [c for c in cur if c != combo]
+print(cur + [combo] if mode == "--remove" else cur)
+PY
+)"
+done
 if [ "${1:-}" = "--remove" ]; then echo "removed DC32 badge shortcuts"; exit 0; fi
 for k in "${KEYS[@]}"; do
   IFS='|' read -r id name binding action <<<"$k"
