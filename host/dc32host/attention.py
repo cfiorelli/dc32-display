@@ -245,14 +245,7 @@ def render(state, slots_map=None, now=None):
     bc = (200, 200, 210) if stale else (LEVEL_SCREEN.get(worst, LIT) if n_lit else TH_CYAN)
     d.text(((C.OUT_W - bw) / 2, 58), big, font=f_big, fill=bc)
     sub = "data is old" if stale else ("need you" if n_lit > 1 else "needs you" if n_lit == 1 else "all clear")
-    d.text(((C.OUT_W - d.textlength(sub, font=f_s)) / 2, 108), sub, font=f_s, fill=TH_VIOLET)
-    # legend: what the two colours mean
-    parts = [("●", LEVEL_SCREEN["red"]), (" act now    ", TH_DIM), ("●", LEVEL_SCREEN["yellow"]), (" heads-up", TH_DIM)]
-    lw = sum(d.textlength(t, font=f_s) for t, _ in parts)
-    lx = (C.OUT_W - lw) / 2
-    for t, c in parts:
-        d.text((lx, 124), t, font=f_s, fill=c)
-        lx += d.textlength(t, font=f_s)
+    d.text(((C.OUT_W - d.textlength(sub, font=f_s)) / 2, 110), sub, font=f_s, fill=TH_VIOLET)
     colw = 150
     for s, ind in by_slot.items():
         side, row = s.split("_")
@@ -275,7 +268,7 @@ def render(state, slots_map=None, now=None):
         if lit:
             line2, c2 = _fit(d, ind.get("reason") or "", f_s, colw), col
         else:
-            line2, c2 = ("clear" if not stale else "unknown"), TH_DIM
+            line2, c2 = "", TH_DIM                  # nothing under a clear signal
         # left column reads from its LED inward; the right column is right-aligned against its LED
         if side == "left":
             x0 = 22
