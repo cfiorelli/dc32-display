@@ -21,3 +21,4 @@ firmware/dist/*
 docs/LOCAL_NOTES.md
 # local Claude Code state (settings, agent worktrees)
 .claude/
+.DS_Store
