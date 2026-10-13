@@ -1,7 +1,9 @@
 """Attention lights + report screen.
 
 A separate process writes ~/.cache/dc32-display/attention.json (this daemon only reads it):
-  {"at": "<ISO UTC>", "indicators": [{"id", "label", "lit", "reason", "since", "link"}, ...]}
+  {"at": "<ISO UTC>", "indicators": [{"id", "label", "lit", "level", "reason", "tag", "since", "link"}, ...]}
+reason is the descriptor under the label (the writer keeps it to 12 characters; an unlit indicator may still carry one);
+tag (Lab, Ops, API, Eng) is drawn before it in a category colour. since is not shown.
 Each indicator owns one LED (config `attention_leds`: id -> LED index) and one screen slot
 (config `attention_slots`: id -> "left_top" ... "right_low"). Lit = needs you, off = nothing for you.
 The badge has five front LEDs, placed around the screen: left top (beside the
@@ -163,6 +165,10 @@ TH_MAGENTA = (255, 64, 196)
 TH_VIOLET = (164, 132, 196)    # clear labels
 TH_DIM = (98, 74, 128)
 TH_GLOW = (96, 30, 0)          # under a lit trace
+TH_SOFT = (128, 100, 160)      # descriptor of a clear signal that still has one (CI spend)
+# Category tag colours
+TAG_RGB = {"Lab": (0x5f, 0xd7, 0xff), "Ops": (0xff, 0xaf, 0x5f), "API": (0xff, 0x87, 0xd7), "Eng": (0xaf, 0xff, 0x5f)}
+COLW = 130                     # hard cap on a column's text width; left starts at x=22, right ends at x=298, so they never meet
 
 # Faint PCB traces behind everything: (polyline, via at end?)
 _PCB = [
@@ -212,14 +218,14 @@ def _trace(d, side, row, lit, stale, col=LIT, glow=TH_GLOW):
         _via(d, pts[-1], 2, (120, 120, 130) if stale else TH_TRACE)
 
 
-def render(state, slots_map=None, now=None):
-    """320x240 report in the badge's style: each signal beside its LED, a PCB trace running to it."""
+def render(state, slots_map=None, now=None, boxes=None):
+    """320x240 report in the badge's style: each signal beside its LED, a PCB trace running to it.
+    `boxes`, when a list, receives (side, x0, y0, x1, y1) for every text run drawn in a column."""
     slots_map = {k: v for k, v in (slots_map or DEFAULT_SLOTS).items() if v in SLOT_ORDER}
-    now = now or dt.datetime.now(dt.timezone.utc)
     img = Image.new("RGB", (C.OUT_W, C.OUT_H), TH_BG)
     d = ImageDraw.Draw(img)
     _background(d)
-    f_t, f_l, f_s, f_big = _ttf(13, bold=True), _ttf(13, bold=True), _ttf(11), _ttf(44, bold=True)
+    f_t, f_l, f_s, f_tag, f_big = _ttf(13, bold=True), _ttf(13, bold=True), _ttf(11), _ttf(11, bold=True), _ttf(44, bold=True)
     stale = state["stale"]
     by_slot = {}
     for n, i in enumerate(state["indicators"]):
@@ -244,9 +250,15 @@ def render(state, slots_map=None, now=None):
     bw = d.textlength(big, font=f_big)
     bc = (200, 200, 210) if stale else (LEVEL_SCREEN.get(worst, LIT) if n_lit else TH_CYAN)
     d.text(((C.OUT_W - bw) / 2, 58), big, font=f_big, fill=bc)
-    sub = "data is old" if stale else ("need you" if n_lit > 1 else "needs you" if n_lit == 1 else "all clear")
-    d.text(((C.OUT_W - d.textlength(sub, font=f_s)) / 2, 110), sub, font=f_s, fill=TH_VIOLET)
-    colw = 150
+    if stale:
+        sub = "data is old"
+        d.text(((C.OUT_W - d.textlength(sub, font=f_s)) / 2, 110), sub, font=f_s, fill=TH_VIOLET)
+
+    def put(side, xy, text, font, fill):
+        d.text(xy, text, font=font, fill=fill)
+        if boxes is not None and text.strip():
+            boxes.append((side,) + tuple(d.textbbox(xy, text, font=font)))
+
     for s, ind in by_slot.items():
         side, row = s.split("_")
         y = SLOT_Y[row]
@@ -258,29 +270,20 @@ def render(state, slots_map=None, now=None):
             d.ellipse([pad[0] - 4, pad[1] - 4, pad[0] + 4, pad[1] + 4], fill=col)
         else:
             _via(d, pad, 3, TH_VIOLET if not stale else (150, 150, 160))
-        label = ind.get("label") or ind["id"].replace("_", " ")
-        age_s = ""
-        if lit:
-            since = _parse(ind.get("since"))
-            age_s = _age((now - since).total_seconds()) if since else ""
-        aw = d.textlength(age_s, font=f_s) + 6 if age_s else 0
-        label = _fit(d, label, f_l, colw - aw)
-        if lit:
-            line2, c2 = _fit(d, ind.get("reason") or "", f_s, colw), col
-        else:
-            line2, c2 = "", TH_DIM                  # nothing under a clear signal
+        label = _fit(d, ind.get("label") or ind["id"].replace("_", " "), f_l, COLW)
+        # descriptor: [tag] reason, one line, never wider than the column
+        tag = ind.get("tag") if lit and ind.get("tag") in TAG_RGB else ""
+        tagw = d.textlength(tag + " ", font=f_tag) if tag else 0
+        reason = "" if stale or not ind.get("reason") else _fit(d, str(ind["reason"]), f_s, COLW - tagw)
+        total = tagw + d.textlength(reason, font=f_s)
         # left column reads from its LED inward; the right column is right-aligned against its LED
         if side == "left":
-            x0 = 22
-            d.text((x0, y), label, font=f_l, fill=INK if lit else TH_VIOLET)
-            if age_s:
-                d.text((x0 + d.textlength(label, font=f_l) + 6, y + 1), age_s, font=f_s, fill=TH_MAGENTA)
-            d.text((x0, y + 16), line2, font=f_s, fill=c2)
+            lx = dx = 22
         else:
-            xr = C.OUT_W - 22
-            lwid = d.textlength(label, font=f_l)
-            d.text((xr - lwid, y), label, font=f_l, fill=INK if lit else TH_VIOLET)
-            if age_s:
-                d.text((xr - lwid - aw, y + 1), age_s, font=f_s, fill=TH_MAGENTA)
-            d.text((xr - d.textlength(line2, font=f_s), y + 16), line2, font=f_s, fill=c2)
+            lx, dx = C.OUT_W - 22 - d.textlength(label, font=f_l), C.OUT_W - 22 - total
+        put(side, (lx, y), label, f_l, INK if lit else TH_VIOLET)
+        if tag:
+            put(side, (dx, y + 17), tag, f_tag, TAG_RGB[tag])
+        if reason:
+            put(side, (dx + tagw, y + 16), reason, f_s, col if lit else TH_SOFT)
     return np.asarray(img).copy()
