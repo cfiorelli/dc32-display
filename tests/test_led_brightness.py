@@ -18,13 +18,14 @@ def stub(pct=None):
 
 
 class LedBrightness(unittest.TestCase):
-    def test_default_is_full(self):
-        self.assertEqual(D.led_pct({}), 100)
-        self.assertEqual(D.led_pct({'led_brightness_pct': 'junk'}), 100)
+    def test_default_is_25(self):
+        self.assertEqual(D.led_pct({}), 25)
+        self.assertEqual(D.led_pct({'led_brightness_pct': 'junk'}), 25)
         self.assertEqual(D.led_pct({'led_brightness_pct': 0}), 1)
 
     def test_step_cycles_100_50_25_10(self):
         d = stub()
+        d.cfg['led_brightness_pct'] = 100
         seen = []
         for _ in range(5):
             D.Daemon.action(d, 'led_brightness')
@@ -35,8 +36,8 @@ class LedBrightness(unittest.TestCase):
 
     def test_explicit_percent(self):
         d = stub()
-        D.Daemon.action(d, 'led_brightness:25')
-        self.assertEqual(d.cfg['led_brightness_pct'], 25)
+        D.Daemon.action(d, 'led_brightness:50')
+        self.assertEqual(d.cfg['led_brightness_pct'], 50)
         D.Daemon.action(d, 'led_brightness:500')
         self.assertEqual(d.cfg['led_brightness_pct'], 100)
         D.Daemon.action(d, 'led_brightness:abc')
