@@ -6,6 +6,8 @@ import sys
 import tempfile
 import unittest
 
+import numpy as np
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'host'))
 from dc32host import attention as A
 from dc32host import lights as L
@@ -20,13 +22,15 @@ def iso(sec_ago):
 LEVELS = {'production': 'yellow', 'pr_waiting': 'yellow', 'priority_blocked': 'red', 'spend': 'yellow'}
 
 
-def doc(age, lit=()):
+def doc(age, lit=(), tags=None, quiet=None, levels=None):
+    """lit: id -> descriptor; tags: id -> DWT|Ops|API|Eng; quiet: id -> descriptor kept while unlit (CI spend)."""
     inds = []
     for i, (k, label) in enumerate([('priority_blocked', 'Priority blocked'), ('production', 'Prod + tests'),
                                      ('spend', 'CI spend'), ('capacity', 'AI usage'), ('pr_waiting', 'PR waiting')]):
         on = k in lit
-        inds.append({'id': k, 'label': label, 'lit': on, 'reason': lit[k] if on else '', 'since': iso(3 * 3600) if on else None,
-                     'link': None, 'level': LEVELS.get(k) if on else None})
+        inds.append({'id': k, 'label': label, 'lit': on, 'reason': lit[k] if on else (quiet or {}).get(k, ''),
+                     'tag': (tags or {}).get(k) if on else None, 'since': iso(3 * 3600) if on else None,
+                     'link': None, 'level': (levels or {}).get(k, LEVELS.get(k)) if on else None})
     return {'at': iso(age), 'indicators': inds}
 
 
@@ -39,9 +43,21 @@ def write(obj):
 
 FIXTURES = {
     'none': doc(40),
-    'two': doc(40, {'production': 'wintest unreachable', 'pr_waiting': '2 PRs, oldest 31h'}),
-    'stale': doc(25 * 60, {'production': 'health check failed twice'}),
-    'red': doc(40, {'priority_blocked': 'DWT: approve S8 wording', 'spend': '$88 of $250, $28/day'}),
+    'two': doc(40, {'production': 'wintest off', 'pr_waiting': 'engine#197'}, {'pr_waiting': 'Ops'}),
+    'stale': doc(25 * 60, {'production': 'Health down'}),
+    'red': doc(40, {'priority_blocked': 'Sec call', 'spend': '$210/$250'}, {'priority_blocked': 'DWT'}, levels={'spend': 'red'}),
+    # all five lit with the longest real strings (the live state on 2026-10-13 plus the longest short a writer can emit)
+    'longest': doc(40, {'priority_blocked': 'Wintest SAC', 'production': 'testmac off', 'spend': '$210/$250',
+                        'capacity': 'Claude 83%', 'pr_waiting': 'engine#2055'},
+                   {'priority_blocked': 'Ops', 'pr_waiting': 'Ops'}, levels={'spend': 'red', 'capacity': 'red', 'production': 'yellow'}),
+    'api': doc(40, {'priority_blocked': 'API on site'}, {'priority_blocked': 'API'}),
+    'notag': doc(40, {'priority_blocked': 'fq-13'}, {'priority_blocked': 'Eng'}),
+    'spend_low': doc(40, quiet={'spend': '$90/$250'}),
+    'spend_mid': doc(40, {'spend': '$140/$250'}, levels={'spend': 'yellow'}),
+    'spend_high': doc(40, {'spend': '$210/$250'}, levels={'spend': 'red'}),
+    # 12 widest characters in every descriptor, 12-char tag-prefixed descriptors, and a label that would overflow
+    'worst': doc(40, {k: ('W' * 12 if k != 'production' else 'M' * 12) for k in ('priority_blocked', 'production', 'spend', 'capacity', 'pr_waiting')},
+                 {'priority_blocked': 'DWT', 'pr_waiting': 'API'}),
 }
 
 
@@ -99,6 +115,81 @@ class Attention(unittest.TestCase):
         self.assertFalse((imgs['none'] == imgs['two']).all())
         self.assertFalse((imgs['none'] == imgs['stale']).all())
         self.assertEqual(A.render({'stale': True, 'age': None, 'indicators': []}).shape, (240, 320, 3))
+
+
+def text_pixels(state, side, now=NOW):
+    """Pixels the given column's text changes: the full render minus the same render with that side's text blanked."""
+    full = A.render(state, now=now)
+    blank = dict(state, indicators=[dict(i, label=' ', reason='', tag=None) if A.DEFAULT_SLOTS[i['id']].startswith(side) else i
+                                    for i in state['indicators']])
+    return (full != A.render(blank, now=now)).any(axis=2)
+
+
+class Columns(unittest.TestCase):
+    def test_left_and_right_text_never_meet(self):
+        for name, obj in FIXTURES.items():
+            st = A.load(write(obj), now=NOW)
+            left, right = text_pixels(st, 'left'), text_pixels(st, 'right')
+            for y in range(left.shape[0]):
+                lx, rx = np.flatnonzero(left[y]), np.flatnonzero(right[y])
+                if len(lx) and len(rx):
+                    self.assertGreaterEqual(rx.min() - lx.max(), 8, '%s row %d' % (name, y))
+            # and across rows: no left text pixel within 8 px of ANY right text pixel, so a taller glyph cannot clip either
+            if left.any() and right.any():
+                self.assertGreaterEqual(np.flatnonzero(right.any(axis=0)).min() - np.flatnonzero(left.any(axis=0)).max(), 8, name)
+
+    def test_recorded_boxes_stay_in_their_column(self):
+        for name, obj in FIXTURES.items():
+            boxes = []
+            A.render(A.load(write(obj), now=NOW), now=NOW, boxes=boxes)
+            for side, x0, y0, x1, y1 in boxes:
+                if side == 'left':
+                    self.assertTrue(22 <= x0 and x1 <= 22 + A.COLW + 2, (name, side, x0, x1))
+                else:
+                    self.assertTrue(320 - 22 - A.COLW - 2 <= x0 and x1 <= 320 - 22 + 2, (name, side, x0, x1))
+            lefts = [b[3] for b in boxes if b[0] == 'left']; rights = [b[1] for b in boxes if b[0] == 'right']
+            if lefts and rights:
+                self.assertGreaterEqual(min(rights) - max(lefts), 8, name)
+
+    def test_only_descriptor_and_label_are_drawn(self):
+        seen = []
+        orig = A.ImageDraw.ImageDraw.text
+        A.ImageDraw.ImageDraw.text = lambda self, xy, text, *a, **k: (seen.append(str(text)), orig(self, xy, text, *a, **k))[1]
+        try:
+            for obj in FIXTURES.values():
+                A.render(A.load(write(obj), now=NOW), now=NOW)
+        finally:
+            A.ImageDraw.ImageDraw.text = orig
+        for gone in ('needs you', 'need you', 'all clear'):
+            self.assertNotIn(gone, seen)
+        self.assertFalse([t for t in seen if t in ('3h', '3 h')], 'age next to a label is gone')
+
+    def test_since_is_not_drawn(self):
+        a = FIXTURES['longest']
+        b = json.loads(json.dumps(a))
+        for i in b['indicators']:
+            i['since'] = None
+        self.assertTrue((A.render(A.load(write(a), now=NOW), now=NOW) == A.render(A.load(write(b), now=NOW), now=NOW)).all())
+
+    def test_spend_descriptor_shows_unlit(self):
+        quiet = FIXTURES['spend_low']
+        bare = json.loads(json.dumps(quiet))
+        for i in bare['indicators']:
+            i['reason'] = ''
+        self.assertFalse((A.render(A.load(write(quiet), now=NOW), now=NOW) == A.render(A.load(write(bare), now=NOW), now=NOW)).all())
+        self.assertEqual(A.lit_leds(A.load(write(quiet), now=NOW), A.DEFAULT_LEDS), set())
+
+    def test_tag_colour_follows_the_dashboard(self):
+        self.assertEqual(set(A.TAG_RGB), {'DWT', 'Ops', 'API', 'Eng'})
+        im = A.render(A.load(write(FIXTURES['api']), now=NOW), now=NOW)
+        self.assertTrue(((im == np.array(A.TAG_RGB['API'])).all(axis=2)).any())
+
+    def test_stale_hides_descriptors(self):
+        quiet = dict(FIXTURES['spend_low'], at=iso(25 * 60))
+        bare = json.loads(json.dumps(quiet))
+        for i in bare['indicators']:
+            i['reason'] = ''
+        self.assertTrue((A.render(A.load(write(quiet), now=NOW), now=NOW) == A.render(A.load(write(bare), now=NOW), now=NOW)).all())
 
 
 def render_all(outdir):
