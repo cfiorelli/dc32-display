@@ -79,6 +79,17 @@ class Stats:
         }
 
 
+
+LED_STEPS = (100, 50, 25, 10)
+
+
+def led_pct(cfg) -> int:
+    """LED brightness percent from config (`led_brightness_pct`, default 100), clamped to 1..100."""
+    try:
+        return max(1, min(100, int(cfg.get("led_brightness_pct", 100))))
+    except (TypeError, ValueError):
+        return 100
+
 class Daemon:
     def __init__(self, cfg: dict, backend=None):
         self.cfg = cfg
@@ -289,6 +300,9 @@ class Daemon:
             cols = self.lights.frame(now, loc, self.attention_state(), self.attention_leds())
         if self.dimmed:
             cols = [tuple(v // 4 for v in c) for c in cols]
+        pct = led_pct(self.cfg)
+        if pct < 100:
+            cols = [tuple(v * pct // 100 for v in c) for c in cols]
         if cols != self._leds_last:
             self._leds_last = cols
             self.send(P.set_leds(cols))
@@ -647,6 +661,23 @@ class Daemon:
         elif name == "bootsel":            # for tools/badgetool.py flash while the daemon owns USB
             log.info("rebooting the badge into BOOTSEL")
             self.send(P.reboot(bootsel=True))
+        elif name == "led_brightness" or name.startswith("led_brightness:"):
+            # LED (not screen) brightness. `led_brightness` steps 100 -> 50 -> 25 -> 10 -> 100;
+            # `led_brightness:<1-100>` sets a percent. Saved, so it survives a restart.
+            arg = name.partition(":")[2]
+            if arg:
+                try:
+                    pct = max(1, min(100, int(arg)))
+                except ValueError:
+                    self.say(f"LED brightness: not a percent: {arg}")
+                    return
+            else:
+                cur = led_pct(self.cfg)
+                pct = next((s for s in LED_STEPS if s < cur), LED_STEPS[0])
+            self.cfg["led_brightness_pct"] = pct
+            self._save_pref("led_brightness_pct", pct)
+            self._leds_last = None
+            self.say(f"Lights {pct}%")
         elif name in ("brightness_up", "brightness_down"):
             # 0 is "off" (sleep) on fw >= 0.2.1, so manual brightness stops at 1
             self.brightness = max(1, min(31, self.brightness + (3 if name.endswith("up") else -3)))
