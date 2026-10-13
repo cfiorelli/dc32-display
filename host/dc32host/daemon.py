@@ -84,11 +84,11 @@ LED_STEPS = (100, 50, 25, 10)
 
 
 def led_pct(cfg) -> int:
-    """LED brightness percent from config (`led_brightness_pct`, default 100), clamped to 1..100."""
+    """LED brightness percent from config (`led_brightness_pct`, default 25), clamped to 1..100."""
     try:
-        return max(1, min(100, int(cfg.get("led_brightness_pct", 100))))
+        return max(1, min(100, int(cfg.get("led_brightness_pct", 25))))
     except (TypeError, ValueError):
-        return 100
+        return 25
 
 class Daemon:
     def __init__(self, cfg: dict, backend=None):
