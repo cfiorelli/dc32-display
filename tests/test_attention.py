@@ -48,7 +48,7 @@ FIXTURES = {
     'red': doc(40, {'priority_blocked': 'Demo task', 'spend': '$70/$80'}, {'priority_blocked': 'Lab'}, levels={'spend': 'red'}),
     # all five lit with the longest real strings (the live state on 2026-10-13 plus the longest short a writer can emit)
     'longest': doc(40, {'priority_blocked': 'Lab account', 'production': 'deskpc off', 'spend': '$70/$80',
-                        'capacity': 'Claude 83%', 'pr_waiting': 'sample#1234'},
+                        'capacity': 'Claude 17% left', 'pr_waiting': 'sample#1234'},
                    {'priority_blocked': 'Ops', 'pr_waiting': 'Ops'}, levels={'spend': 'red', 'capacity': 'red', 'production': 'yellow'}),
     'api': doc(40, {'priority_blocked': 'API limits'}, {'priority_blocked': 'API'}),
     'notag': doc(40, {'priority_blocked': 'task-12'}, {'priority_blocked': 'Eng'}),
@@ -137,6 +137,16 @@ class Columns(unittest.TestCase):
             # and across rows: no left text pixel within 8 px of ANY right text pixel, so a taller glyph cannot clip either
             if left.any() and right.any():
                 self.assertGreaterEqual(np.flatnonzero(right.any(axis=0)).min() - np.flatnonzero(left.any(axis=0)).max(), 8, name)
+
+    def test_tag_and_descriptor_share_a_baseline_and_size(self):
+        boxes = []
+        A.render(A.load(write(FIXTURES['longest']), now=NOW), now=NOW, boxes=boxes)
+        pri = sorted((b for b in boxes if b[0] == 'right' and 150 < b[2] < 170), key=lambda b: b[1])   # priority_blocked descriptor row
+        self.assertEqual(len(pri), 3, pri)                       # label, tag, reason
+        _, tag, reason = pri
+        self.assertEqual(tag[4], reason[4])                      # same bottom: no descenders in "Ops"/"Lab account", so the baseline
+        self.assertGreaterEqual(reason[4] - reason[2], 10)       # taller than the old 11 px text
+        self.assertEqual(A.TAG_RGB['Ops'], (0xff, 0xaf, 0x5f))
 
     def test_recorded_boxes_stay_in_their_column(self):
         for name, obj in FIXTURES.items():
