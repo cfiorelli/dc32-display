@@ -661,18 +661,23 @@ class Daemon:
         elif name == "bootsel":            # for tools/badgetool.py flash while the daemon owns USB
             log.info("rebooting the badge into BOOTSEL")
             self.send(P.reboot(bootsel=True))
-        elif name == "led_brightness" or name.startswith("led_brightness:"):
+        elif name in ("led_brightness", "led_brightness_up", "led_brightness_down") or name.startswith("led_brightness:"):
             # LED (not screen) brightness. `led_brightness` steps 100 -> 50 -> 25 -> 10 -> 100;
+            # `_up` / `_down` (FN + up/down, Ctrl+Alt+Up/Down) move one step and stop at the ends;
             # `led_brightness:<1-100>` sets a percent. Saved, so it survives a restart.
             arg = name.partition(":")[2]
-            if arg:
+            cur = led_pct(self.cfg)
+            if name == "led_brightness_up":
+                pct = next((s for s in sorted(LED_STEPS) if s > cur), max(LED_STEPS))
+            elif name == "led_brightness_down":
+                pct = next((s for s in LED_STEPS if s < cur), min(LED_STEPS))
+            elif arg:
                 try:
                     pct = max(1, min(100, int(arg)))
                 except ValueError:
                     self.say(f"LED brightness: not a percent: {arg}")
                     return
             else:
-                cur = led_pct(self.cfg)
                 pct = next((s for s in LED_STEPS if s < cur), LED_STEPS[0])
             self.cfg["led_brightness_pct"] = pct
             self._save_pref("led_brightness_pct", pct)

@@ -20,12 +20,12 @@ KEYS = [("B", "runner / report", "toggle_report"), ("F", "Flipper Zero", "flippe
         ("M", "command menu", "command_menu"), ("P", "Doom II", "doom2")]
 NUMBERED = [a for _, _, a in KEYS]               # number n opens KEYS[n-1]; 0 = the 10th
 # Other Ctrl+Alt shortcuts (not numbered), shown as a footer on page 1.
-EXTRA = "also: R refresh · G lights · S sleep · Z/X zoom/fit · Y keyboard · H page"
+EXTRA = "also: R refresh · G lights · ▲▼ light level · S sleep · Z/X zoom · Y keys · H page"
 BADGE = [("FN", "menu"), ("B", "back / close"),
          ("A", "zoom"), ("A hold", "runner"),
          ("D-pad", "move view"), ("START", "app list"),
          ("SELECT", "previous app"), ("SEL hold", "pin mode"),
-         ("FN + B", "info"), ("FN ▲▼", "brightness")]
+         ("FN + B", "info"), ("FN ▲▼", "lights dim / bright")]
 # Page 3 — what the controls do inside each view.
 APPS = [("Flipper", "D-pad move · A=OK · B=Back · Ctrl+Alt+Y = PC keys"),
         ("Spectrum", "◀▶ tune · ▲▼ step · A=band · START=audio"),
