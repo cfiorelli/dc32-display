@@ -33,6 +33,8 @@ COMMANDS = [
     ("Lights: 50%", "led_brightness:50"),
     ("Lights: 25%", "led_brightness:25"),
     ("Lights: 10%", "led_brightness:10"),
+    ("Lights: 5%", "led_brightness:5"),
+    ("Lights: 1%", "led_brightness:1"),
     ("Refresh runner data", "refresh_data"),
     ("Mode: follow / pin / desktop", "cycle_mode"),
     ("Sleep (screen off)", "sleep"),
