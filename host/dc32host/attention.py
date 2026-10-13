@@ -225,7 +225,8 @@ def render(state, slots_map=None, now=None, boxes=None):
     img = Image.new("RGB", (C.OUT_W, C.OUT_H), TH_BG)
     d = ImageDraw.Draw(img)
     _background(d)
-    f_t, f_l, f_s, f_tag, f_big = _ttf(13, bold=True), _ttf(13, bold=True), _ttf(11), _ttf(11, bold=True), _ttf(44, bold=True)
+    f_t, f_l, f_s, f_big = _ttf(13, bold=True), _ttf(13, bold=True), _ttf(11), _ttf(44, bold=True)
+    f_d, f_tag = _ttf(13), _ttf(13, bold=True)     # descriptor line: tag and reason share one size and one baseline
     stale = state["stale"]
     by_slot = {}
     for n, i in enumerate(state["indicators"]):
@@ -254,10 +255,10 @@ def render(state, slots_map=None, now=None, boxes=None):
         sub = "data is old"
         d.text(((C.OUT_W - d.textlength(sub, font=f_s)) / 2, 110), sub, font=f_s, fill=TH_VIOLET)
 
-    def put(side, xy, text, font, fill):
-        d.text(xy, text, font=font, fill=fill)
+    def put(side, xy, text, font, fill, anchor="la"):
+        d.text(xy, text, font=font, fill=fill, anchor=anchor)
         if boxes is not None and text.strip():
-            boxes.append((side,) + tuple(d.textbbox(xy, text, font=font)))
+            boxes.append((side,) + tuple(d.textbbox(xy, text, font=font, anchor=anchor)))
 
     for s, ind in by_slot.items():
         side, row = s.split("_")
@@ -274,8 +275,8 @@ def render(state, slots_map=None, now=None, boxes=None):
         # descriptor: [tag] reason, one line, never wider than the column
         tag = ind.get("tag") if lit and ind.get("tag") in TAG_RGB else ""
         tagw = d.textlength(tag + " ", font=f_tag) if tag else 0
-        reason = "" if stale or not ind.get("reason") else _fit(d, str(ind["reason"]), f_s, COLW - tagw)
-        total = tagw + d.textlength(reason, font=f_s)
+        reason = "" if stale or not ind.get("reason") else _fit(d, str(ind["reason"]), f_d, COLW - tagw)
+        total = tagw + d.textlength(reason, font=f_d)
         # left column reads from its LED inward; the right column is right-aligned against its LED
         if side == "left":
             lx = dx = 22
@@ -283,7 +284,7 @@ def render(state, slots_map=None, now=None, boxes=None):
             lx, dx = C.OUT_W - 22 - d.textlength(label, font=f_l), C.OUT_W - 22 - total
         put(side, (lx, y), label, f_l, INK if lit else TH_VIOLET)
         if tag:
-            put(side, (dx, y + 17), tag, f_tag, TAG_RGB[tag])
+            put(side, (dx, y + 31), tag, f_tag, TAG_RGB[tag], "ls")
         if reason:
-            put(side, (dx + tagw, y + 16), reason, f_s, col if lit else TH_SOFT)
+            put(side, (dx + tagw, y + 31), reason, f_d, col if lit else TH_SOFT, "ls")
     return np.asarray(img).copy()
