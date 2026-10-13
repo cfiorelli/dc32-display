@@ -57,6 +57,25 @@ class LedBrightness(unittest.TestCase):
         self.assertEqual(d.cfg['led_brightness_pct'], 100)
         self.assertIn('not a percent', d.said[-1])
 
+class LedsStayLit(unittest.TestCase):
+    def test_lit_channel_never_rounds_to_off(self):
+        self.assertEqual(D.scale_leds([(255, 0, 0), (255, 150, 0), (0, 0, 0)], 1), [(2, 0, 0), (2, 1, 0), (0, 0, 0)])
+        self.assertEqual(D.scale_leds([(63, 37, 0)], 1), [(1, 1, 0)])
+        self.assertEqual(D.scale_leds([(255, 150, 0)], 100), [(255, 150, 0)])
+
+    def test_idle_dim_leaves_leds_alone(self):
+        d = stub(1)
+        d.dimmed = True
+        d._leds_t, d._identify = 0.0, None
+        d.lights = type('L', (), {'mode': 'attention', 'frame': lambda self, *a: [(255, 0, 0)] + [(0, 0, 0)] * 8})()
+        d.attention_state = lambda: {}
+        d.attention_leds = lambda: {}
+        sent = []
+        d.send = sent.append
+        D.Daemon.update_leds(d)
+        self.assertEqual(d._leds_last[0], (2, 0, 0))
+        self.assertEqual(len(sent), 1)
+
 
 if __name__ == '__main__':
     unittest.main()
