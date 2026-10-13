@@ -83,6 +83,14 @@ class Stats:
 LED_STEPS = (100, 50, 25, 10, 5, 2, 1)
 
 
+def scale_leds(cols, pct):
+    """Scale LED colours to `pct` percent. A channel that is on stays at least 1, so a lit LED never
+    rounds to off at a low setting (1% of 150 is 1.5, which integer scaling made 1, and 1% of 63 made 0)."""
+    if pct >= 100:
+        return list(cols)
+    return [tuple(max(1, v * pct // 100) if v else 0 for v in c) for c in cols]
+
+
 def led_pct(cfg) -> int:
     """LED brightness percent from config (`led_brightness_pct`, default 25), clamped to 1..100."""
     try:
@@ -298,11 +306,9 @@ class Daemon:
                 self.stop_identify()
         else:
             cols = self.lights.frame(now, loc, self.attention_state(), self.attention_leds())
-        if self.dimmed:
-            cols = [tuple(v // 4 for v in c) for c in cols]
-        pct = led_pct(self.cfg)
-        if pct < 100:
-            cols = [tuple(v * pct // 100 for v in c) for c in cols]
+        # No idle dimming here: the idle dim is for the LCD backlight. The LEDs hold the level set with
+        # the light-level controls, because quartering them made 1% round to off after 10 idle minutes.
+        cols = scale_leds(cols, led_pct(self.cfg))
         if cols != self._leds_last:
             self._leds_last = cols
             self.send(P.set_leds(cols))
