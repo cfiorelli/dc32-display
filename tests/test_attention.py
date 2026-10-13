@@ -343,7 +343,7 @@ class Pulse(unittest.TestCase):
         d = stub(1)
         d._leds_t, d._identify = 0.0, None
         d.lights = type('L', (), {'mode': 'attention', 'frame': lambda self, *a: [(255, 0, 0)] + [(0, 0, 0)] * 8})()
-        d.attention_state = lambda: A.load(write(pdoc(('priority_blocked',), lit=('priority_blocked',))), now=dt.datetime.now(dt.timezone.utc))
+        d.attention_state = lambda: A.load(write(pdoc(('priority_blocked',), lit=('priority_blocked',))), now=NOW)
         d.attention_leds = lambda: {'priority_blocked': 0}
         sent = []
         d.send = sent.append
