@@ -298,7 +298,8 @@ class Blue(unittest.TestCase):
             seq = [A.apply_pulse(scaled, {0}, k * 0.1)[0] for k in range(21)]
             self.assertEqual((seq[0], seq[10], seq[20]), ((0, 0, 0), peak, (0, 0, 0)))
             self.assertTrue(all(c[0] == 0 and c[1] == 0 for c in seq))
-            self.assertEqual({c[2] for c in seq} >= {0, 1, peak[2]}, True)
+            levels = {c[2] for c in seq}
+            self.assertTrue(levels >= {0, 1, 2} if pct == 1 else len(levels) > 8, levels)
         self.assertEqual(max(D.scale_leds([A.LEVEL_LED['red']], 1)[0]), max(D.scale_leds([A.LEVEL_LED['blue']], 1)[0]))
 
     def test_blue_pulses_when_flagged(self):
