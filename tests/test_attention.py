@@ -264,6 +264,71 @@ MIXED = doc(40, {'capacity': 'Codex bal: 4%', 'priority_blocked': 'Windows CI'},
             counts={'capacity': {'red': 0, 'yellow': 1, 'blue': 1}})
 
 
+def seg_doc(segments, level='yellow', lit=True, counts=None):
+    d = doc(40, {'capacity': ' '.join(t for t, _ in segments)} if lit else {}, levels={'capacity': level}, quiet=None if lit else {'capacity': ' '.join(t for t, _ in segments)},
+            counts={'capacity': counts or {'red': 0, 'yellow': int(level == 'yellow'), 'blue': 0}})
+    for i in d['indicators']:
+        if i['id'] == 'capacity':
+            i['segments'] = [{'t': t, 'level': lv} for t, lv in segments]
+    return d
+
+
+class Segments(unittest.TestCase):
+    CASES = {
+        'today': ([('Cl 30%', 'neutral'), ('Cx 4%', 'yellow')], 'yellow'),
+        'red': ([('Cl 15%', 'red'), ('Cx 80%', 'neutral')], 'red'),
+        'blue_yellow': ([('Cl 60%', 'blue'), ('Cx 4%', 'yellow')], 'yellow'),
+        'widest': ([('Cl 100%', 'blue'), ('Cx 100%', 'blue')], 'blue'),
+    }
+
+    def colours_in_descriptor_row(self, name):
+        segs, level = self.CASES[name]
+        im = A.render(A.load(write(seg_doc(segs, level)), now=NOW), now=NOW)
+        band = im[150:178, 22:152]                  # AI usage descriptor (left_middle: y 140 + 31 baseline), column 22..152
+        return {lv: bool((band == np.array(A.LEVEL_SCREEN[lv])).all(axis=2).any()) for lv in ('red', 'yellow', 'blue')}, \
+               bool((band == np.array(A.TH_SOFT)).all(axis=2).any())
+
+    def test_each_segment_in_its_own_colour(self):
+        found, soft = self.colours_in_descriptor_row('today')
+        self.assertEqual((found['yellow'], found['red'], found['blue'], soft), (True, False, False, True))     # Cl neutral (soft), Cx yellow
+        found, soft = self.colours_in_descriptor_row('red')
+        self.assertEqual((found['red'], found['yellow'], soft), (True, False, True))
+        found, soft = self.colours_in_descriptor_row('blue_yellow')
+        self.assertEqual((found['blue'], found['yellow'], soft), (True, True, False))
+
+    def test_segment_boxes_are_separate_runs_in_order(self):
+        boxes = []
+        A.render(A.load(write(seg_doc(*self.CASES['today'])), now=NOW), now=NOW, boxes=boxes)
+        runs = sorted((b for b in boxes if b[0] == 'left' and 150 < b[2] < 178), key=lambda b: b[1])
+        self.assertEqual(len(runs), 2)
+        self.assertLess(runs[0][3], runs[1][1])                  # Claude segment left of the Codex segment, with a gap
+
+    def test_widest_descriptor_fits_the_column_and_keeps_the_gap(self):
+        boxes = []
+        d = seg_doc(*self.CASES['widest'])
+        d['indicators'] = [dict(i, label=i['label']) for i in d['indicators']]
+        for i in d['indicators']:
+            if i['id'] == 'priority_blocked':                    # right_middle, same row band: the worst neighbour
+                i.update(lit=True, level='red', reason='W' * 12, tag='DWT', counts={'red': 12, 'yellow': 0, 'blue': 0})
+        A.render(A.load(write(d), now=NOW), now=NOW, boxes=boxes)
+        lefts = [b for b in boxes if b[0] == 'left' and 130 <= b[2] < 190]
+        rights = [b for b in boxes if b[0] == 'right' and 130 <= b[2] < 190]
+        self.assertTrue(lefts and rights)
+        self.assertTrue(all(b[3] <= 22 + A.COLW for b in lefts), lefts)
+        self.assertGreaterEqual(min(b[1] for b in rights) - max(b[3] for b in lefts), 8)
+
+    def test_unlit_both_neutral_still_shows_the_descriptor(self):
+        d = seg_doc([('Cl 40%', 'neutral'), ('Cx 80%', 'neutral')], level=None, lit=False)
+        im = A.render(A.load(write(d), now=NOW), now=NOW)
+        self.assertTrue(((im[150:178, 22:152] == np.array(A.TH_SOFT)).all(axis=2)).any())
+        self.assertEqual(A.lit_leds(A.load(write(d), now=NOW), A.DEFAULT_LEDS), set())
+
+    def test_stale_hides_segments(self):
+        d = dict(seg_doc(*self.CASES['today']), at=iso(25 * 60))
+        im = A.render(A.load(write(d), now=NOW), now=NOW)
+        self.assertFalse(((im[150:178, 22:152] == np.array(A.LEVEL_SCREEN['yellow'])).all(axis=2)).any())
+
+
 class Blue(unittest.TestCase):
     def test_led_colour_and_steady_frame(self):
         st = A.load(write(BLUE), now=NOW)
@@ -307,6 +372,8 @@ class Blue(unittest.TestCase):
         self.assertEqual(A.pulse_leds(A.load(write(d), now=NOW), A.DEFAULT_LEDS), {A.DEFAULT_LEDS['capacity']})
 
 
+FIXTURES['seg_today'] = seg_doc(*Segments.CASES['today'])
+FIXTURES['seg_widest'] = seg_doc(*Segments.CASES['widest'])
 FIXTURES['blue'] = BLUE
 FIXTURES['blue_mixed'] = MIXED
 
