@@ -2,7 +2,7 @@
 
 A separate process writes ~/.cache/dc32-display/attention.json (this daemon only reads it):
   {"at": "<ISO UTC>", "indicators": [{"id", "label", "lit", "level", "reason", "tag", "since", "link"}, ...]}
-reason is the descriptor under the label (the writer keeps it to 12 characters; an unlit indicator may still carry one);
+reason is the descriptor under the label (an optional `segments` [{t, level}] draws it in one colour per piece) (the writer keeps it to 12 characters; an unlit indicator may still carry one);
 tag (Lab, Ops, API, Eng) is drawn before it in a category colour. since is not shown.
 Each indicator owns one LED (config `attention_leds`: id -> LED index) and one screen slot
 (config `attention_slots`: id -> "left_top" ... "right_low"). Lit = needs you, off = nothing for you.
@@ -330,7 +330,14 @@ def render(state, slots_map=None, now=None, boxes=None):
         tag = ind.get("tag") if lit and ind.get("tag") in TAG_RGB else ""
         tagw = d.textlength(tag + " ", font=f_tag) if tag else 0
         reason = "" if stale or not ind.get("reason") else _fit(d, str(ind["reason"]), f_d, COLW - tagw)
-        total = tagw + d.textlength(reason, font=f_d)
+        # per-segment colours ("Cl 30% Cx 4%": each plan in its own level colour, neutral in the soft descriptor colour)
+        pieces = []
+        segs = [x for x in (ind.get("segments") or []) if isinstance(x, dict) and x.get("t")]
+        if segs and reason and not stale:
+            txt = " ".join(x["t"] for x in segs)
+            if _fit(d, txt, f_d, COLW - tagw) == txt:
+                pieces = [(x["t"] + (" " if n < len(segs) - 1 else ""), LEVEL_SCREEN.get(x.get("level"), TH_SOFT)) for n, x in enumerate(segs)]
+        total = tagw + (sum(d.textlength(t, font=f_d) for t, _ in pieces) if pieces else d.textlength(reason, font=f_d))
         # left column reads from its LED inward; the right column is right-aligned against its LED
         if side == "left":
             lx = dx = 22
@@ -343,7 +350,12 @@ def render(state, slots_map=None, now=None, boxes=None):
             cx += w
         if tag:
             put(side, (dx, y + 31), tag, f_tag, TAG_RGB[tag], "ls")
-        if reason:
+        if pieces:
+            px = dx + tagw
+            for t, c in pieces:
+                put(side, (px, y + 31), t.rstrip(), f_d, c, "ls")
+                px += d.textlength(t, font=f_d)
+        elif reason:
             put(side, (dx + tagw, y + 31), reason, f_d, col if lit else TH_SOFT, "ls")
     return np.asarray(img).copy()
 
