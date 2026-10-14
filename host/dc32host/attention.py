@@ -31,10 +31,13 @@ PATH = Path.home() / ".cache" / "dc32-display" / "attention.json"
 ORDER_PATH = Path.home() / ".cache" / "dc32-display" / "eng-order.json"   # pushed next to attention.json
 STALE_S = 600
 LIT = (255, 80, 0)                    # lit with no level given (older writers)
-# red = act now, yellow = heads-up. LED values are tuned for the WS2812s; screen values for the LCD.
-LEVEL_LED = {"red": (255, 0, 0), "yellow": (255, 150, 0)}
-LEVEL_SCREEN = {"red": (255, 56, 56), "yellow": (255, 196, 0)}
-LEVEL_GLOW = {"red": (90, 0, 0), "yellow": (88, 60, 0)}
+# red = act now, yellow = heads-up, blue = a plan sits idle with allowance to spend (give it work). LED values are tuned for
+# the WS2812s (pure blue: at the 1% level it still scales to (0,0,2), the same peak as red); screen values for the LCD. Blue is
+# well away from TH_CYAN (the all-clear count colour) and from the white stale blink.
+LEVEL_LED = {"red": (255, 0, 0), "yellow": (255, 150, 0), "blue": (0, 0, 255)}
+LEVEL_SCREEN = {"red": (255, 56, 56), "yellow": (255, 196, 0), "blue": (70, 100, 255)}
+LEVEL_GLOW = {"red": (90, 0, 0), "yellow": (88, 60, 0), "blue": (10, 20, 100)}
+LEVEL_ORDER = ("red", "yellow", "blue")
 STALE_RGB = (255, 255, 255)
 # Default mapping from the firmware's front LEDs (0,2,4,5,6) and its button zones (4 = D-pad, left low;
 # 5 = A/B, right low; 6 = START/SELECT, right middle). 0 and 2 (left top / left middle) are UNCONFIRMED:
@@ -280,7 +283,7 @@ def render(state, slots_map=None, now=None, boxes=None):
             by_slot[s] = i
     lits = [i for i in by_slot.values() if i.get("lit")] if not stale else []
     n_lit = len(lits)
-    worst = "red" if any(i.get("level") == "red" for i in lits) else ("yellow" if lits else None)
+    worst = next((k for k in LEVEL_ORDER if any(i.get("level") == k for i in lits)), None)
     # title, top right (no LED there)
     title = "N E E D S   Y O U"
     tw = d.textlength(title, font=f_t)
@@ -318,8 +321,8 @@ def render(state, slots_map=None, now=None, boxes=None):
             _via(d, pad, 3, TH_VIOLET if not stale else (150, 150, 160))
         # "<n>R <n>Y": how many items sit behind this light, only when there is more than one (the age's old slot)
         cn = ind.get("counts") or {}
-        runs = [("%d%s" % (cn.get(k) or 0, k[0].upper()), LEVEL_SCREEN[k]) for k in ("red", "yellow") if (cn.get(k) or 0) > 0]
-        runs = runs if lit and sum(cn.get(k) or 0 for k in ("red", "yellow")) > 1 else []
+        runs = [("%d%s" % (cn.get(k) or 0, k[0].upper()), LEVEL_SCREEN[k]) for k in LEVEL_ORDER if (cn.get(k) or 0) > 0]
+        runs = runs if lit and sum(cn.get(k) or 0 for k in LEVEL_ORDER) > 1 else []
         cw = [d.textlength(t + " ", font=f_cnt) for t, _ in runs]
         countw = sum(cw) + 4 if runs else 0
         label = _fit(d, ind.get("label") or ind["id"].replace("_", " "), f_l, (L1W if runs else COLW) - countw)

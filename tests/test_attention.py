@@ -259,6 +259,57 @@ class Backlog(unittest.TestCase):
         self.assertEqual(A.load(write(dict(doc(40), backlog=EXTRA)), now=NOW)['backlog'], EXTRA)
 
 
+BLUE = doc(40, {'capacity': 'Claude bal: 60%'}, levels={'capacity': 'blue'}, counts={'capacity': {'red': 0, 'yellow': 0, 'blue': 1}})
+MIXED = doc(40, {'capacity': 'Codex bal: 4%', 'priority_blocked': 'Windows CI'}, {'priority_blocked': 'Ops'}, levels={'capacity': 'yellow'},
+            counts={'capacity': {'red': 0, 'yellow': 1, 'blue': 1}})
+
+
+class Blue(unittest.TestCase):
+    def test_led_colour_and_steady_frame(self):
+        st = A.load(write(BLUE), now=NOW)
+        f = A.frame(0.0, st, A.DEFAULT_LEDS)
+        self.assertEqual(f[A.DEFAULT_LEDS['capacity']], (0, 0, 255))
+        self.assertNotIn(A.LEVEL_LED['blue'], (A.STALE_RGB, A.LEVEL_LED['red'], A.LEVEL_LED['yellow']))
+        # distinct from the screen's all-clear cyan border colour
+        self.assertGreater(sum(abs(a - b) for a, b in zip(A.LEVEL_SCREEN['blue'], A.TH_CYAN)), 100)
+
+    def test_counts_draw_1y_1b(self):
+        seen = []
+        orig = A.ImageDraw.ImageDraw.text
+        A.ImageDraw.ImageDraw.text = lambda self, xy, text, *a, **k: (seen.append(str(text)), orig(self, xy, text, *a, **k))[1]
+        try:
+            A.render(A.load(write(MIXED), now=NOW), now=NOW)
+        finally:
+            A.ImageDraw.ImageDraw.text = orig
+        self.assertIn('1Y', seen)
+        self.assertIn('1B', seen)
+        self.assertNotIn('1R', seen)
+
+    def test_count_and_border_colour_follow_the_worst_level(self):
+        im = A.render(A.load(write(BLUE), now=NOW), now=NOW)
+        self.assertTrue((im == np.array(A.LEVEL_SCREEN['blue'])).all(axis=2).any())          # the big count and the lit dot
+        im = A.render(A.load(write(MIXED), now=NOW), now=NOW)
+        self.assertTrue((im == np.array(A.LEVEL_SCREEN['yellow'])).all(axis=2).any())        # yellow outranks blue
+
+    def test_blue_pulse_peak_matches_red_at_1_and_25_percent(self):
+        for pct, peak in ((1, (0, 0, 2)), (25, (0, 0, 63))):
+            scaled = D.scale_leds([A.LEVEL_LED['blue']], pct)
+            self.assertEqual(scaled[0], peak)
+            seq = [A.apply_pulse(scaled, {0}, k * 0.1)[0] for k in range(21)]
+            self.assertEqual((seq[0], seq[10], seq[20]), ((0, 0, 0), peak, (0, 0, 0)))
+            self.assertTrue(all(c[0] == 0 and c[1] == 0 for c in seq))
+            self.assertEqual({c[2] for c in seq} >= {0, 1, peak[2]}, True)
+        self.assertEqual(max(D.scale_leds([A.LEVEL_LED['red']], 1)[0]), max(D.scale_leds([A.LEVEL_LED['blue']], 1)[0]))
+
+    def test_blue_pulses_when_flagged(self):
+        d = dict(BLUE); d['indicators'] = [dict(i, pulse=True) for i in BLUE['indicators']]
+        self.assertEqual(A.pulse_leds(A.load(write(d), now=NOW), A.DEFAULT_LEDS), {A.DEFAULT_LEDS['capacity']})
+
+
+FIXTURES['blue'] = BLUE
+FIXTURES['blue_mixed'] = MIXED
+
+
 def pdoc(pulses, lit=('priority_blocked', 'production', 'spend', 'capacity', 'pr_waiting')):
     """Fixture where each id in `lit` is lit and pulses only if listed in `pulses`."""
     d = doc(40, {k: 'x' for k in lit})
