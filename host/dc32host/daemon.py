@@ -232,6 +232,8 @@ class Daemon:
         now = time.time()
         new_knock = now - self._tap_last > TAP_BURST_GAP
         self._tap_last = now
+        if self.view == "accel":                        # tuner open: show impulse, never act on taps
+            return
         if not self.cfg.get("tap_sleep", True) or not new_knock:
             return
         prev, self._knock_t = self._knock_t, now
@@ -471,6 +473,14 @@ class Daemon:
                         self.show_and_focus(wi)
                         return
             self.say("No previous app")
+        elif name in ("next_app", "prev_app"):
+            wins = self.be.list_windows()
+            if not wins:
+                self.say("No apps"); return
+            cur = self.mru[0] if getattr(self, "mru", None) else None
+            idx = next((i for i, w in enumerate(wins) if w.handle == cur), 0)
+            step = 1 if name == "next_app" else -1
+            self.show_and_focus(wins[(idx + step) % len(wins)])
         elif name == "app_switcher":
             self.open_switcher()
         elif name in ("dashboard", "open_dashboard"):     # full terminal dashboard on the PC
@@ -526,6 +536,10 @@ class Daemon:
             self.say("Keyboard -> badge (Ctrl+Alt+Y: back to PC)" if self.kb_focus else "Keyboard -> PC")
         elif name in ("level", "toggle_level"):   # Ctrl+Alt+O: accelerometer bubble level
             self.set_view("mirror" if self.view == "level" else "level")
+        elif name in ("accel_tune", "toggle_accel"):   # tap-threshold (knock sensitivity) tuner
+            if self.view != "accel":
+                self._accel().threshold = int(self.cfg.get("tap_threshold", 12))
+            self.set_view("mirror" if self.view == "accel" else "accel")
         elif name in ("clock", "toggle_clock"):   # Ctrl+Alt+C: drifting clock screensaver
             self.set_view("mirror" if self.view == "clock" else "clock")
         elif name in ("system", "toggle_system"):   # Ctrl+Alt+U: live system monitor
@@ -729,8 +743,8 @@ class Daemon:
             self._flipper()[0].stop()
         if (view == "ir") != (self.view == "ir"):
             self.send(P.set_ir(view == "ir"))     # the IR receiver only runs while the scope is open
-        if (view == "level") != (self.view == "level"):
-            self.send(P.set_accel(view == "level"))   # stream the accelerometer only for the level
+        if (view in ("level", "accel")) != (self.view in ("level", "accel")):
+            self.send(P.set_accel(view in ("level", "accel")))   # stream the accelerometer for the level + tap tuner
         self.view = view
         if view == "help" and hasattr(self.be, "grab_help_keys"):
             self.be.grab_help_keys(lambda k: self.ctl_q.put("helpkey:" + k))
@@ -749,7 +763,8 @@ class Daemon:
             self.say({"mirror": "Mirroring screen", "runner": "Runner costs", "paused": "Display paused",
                       "ir": "IR scope", "flipper": "Flipper", "sdr": "Spectrum (SDR)",
                       "bench": "RF bench", "sys": "System monitor", "clock": "Clock",
-                      "level": "Level", "report": "Needs-you report", "backlog": "Backlog", "identify": "LED identify"}[view],
+                      "level": "Level", "report": "Needs-you report", "backlog": "Backlog", "identify": "LED identify",
+                      "accel": "Tap tuner"}[view],
                      "Ctrl+Alt+Y: keyboard -> badge" if view in self.KEYBOARD_VIEWS
                      else "FN: menu" if view != "mirror" else "")
         self.vp.reset()
@@ -810,6 +825,12 @@ class Daemon:
                                     flip_x=bool(self.cfg.get("level_flip_x", False)),
                                     flip_y=bool(self.cfg.get("level_flip_y", False)))
         return self.levelv
+
+    def _accel(self):
+        if getattr(self, "accelv", None) is None:
+            from .accel_view import AccelTunerView
+            self.accelv = AccelTunerView(int(self.cfg.get("tap_threshold", 12)))
+        return self.accelv
 
     def _clock(self):
         if getattr(self, "clockv", None) is None:
@@ -888,6 +909,7 @@ class Daemon:
             ("Flipper Zero (Ctrl+Alt+F)", "flipper", self.view == "flipper"),
             ("Spectrum / SDR (Ctrl+Alt+W)", "sdr_view", self.view == "sdr"),
             ("RF bench (Ctrl+Alt+V)", "rf_bench", self.view == "bench"),
+            ("Tap tuner (knock sens.)", "accel_tune", self.view == "accel"),
             ("Sleep: screen off (Ctrl+Alt+S)", "sleep", False),
             ("Status info", "info", False),
         ]
@@ -1007,6 +1029,18 @@ class Daemon:
             self.help_page = (getattr(self, "help_page", 0) + (1 if ev.button == "right" else -1)) % PAGES
             self.force_refresh()
             return
+        if self.view == "accel" and ev.button in ("up", "down", "a", "b") and "fn" not in ev.held:
+            av = self._accel()
+            if ev.event in ("short", "repeat") and ev.button in ("up", "down"):
+                av.threshold = max(1, min(127, av.threshold + (1 if ev.button == "up" else -1)))
+                self.cfg["tap_threshold"] = av.threshold
+                self.send(P.set_tap(av.threshold))
+                CFG.save(self.cfg)
+            elif ev.event == "short" and ev.button == "a":
+                av.clear()
+            elif ev.event == "short" and ev.button == "b":
+                self.set_view("mirror")
+            return
         prefix = "fn+" if ev.fn_held else ""
         key = f"{prefix}{ev.button}.{ev.event}"
         act = self.cfg["buttons"].get(key)
@@ -1055,6 +1089,8 @@ class Daemon:
         elif isinstance(ev, P.AccelEvent):
             if getattr(self, "levelv", None) is not None:
                 self.levelv.update(ev.x, ev.y, ev.z)
+            if getattr(self, "accelv", None) is not None:
+                self.accelv.update(ev.x, ev.y, ev.z)
         elif isinstance(ev, P.TapEvent):
             self.on_tap(ev)
         elif isinstance(ev, P.DeviceError):
@@ -1121,6 +1157,8 @@ class Daemon:
             return time.time(), self._clock().render(), False
         if self.view == "level":
             return time.time(), self._level().render(), False
+        if self.view == "accel":
+            return time.time(), self._accel().render(), False
         if self.view == "flipper":
             self._flipper()[1].kb_here = getattr(self, "kb_focus", None) == "flipper"
             return time.time(), self._flipper()[1].render(), False
