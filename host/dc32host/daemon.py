@@ -636,6 +636,8 @@ class Daemon:
             self._sdr()[0].start()
         elif self.view == "sdr":
             self._sdr()[0].stop()
+        if (view == "bench") != (self.view == "bench"):
+            self._bench()[0].show(view == "bench")   # live spectrum only while the bench is on screen
         if view == "flipper":
             self._flipper()[0].start()
         elif self.view == "flipper":

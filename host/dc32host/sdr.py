@@ -47,6 +47,7 @@ class SdrSource:
         self.status = "idle"
         self.error = None
         self._want = False
+        self._open_dev = False       # the dongle is open (release() waits for this to clear)
         self._retune = True
         self._lock = threading.Lock()
         threading.Thread(target=self._loop, daemon=True, name="sdr").start()
@@ -56,6 +57,29 @@ class SdrSource:
 
     def stop(self):
         self._want = False
+
+    def release(self, timeout=3.0):
+        """Stop and wait until the dongle is closed, so another user (the RF bench capture) can open it."""
+        self._want = False
+        end = time.time() + timeout
+        while self._open_dev and time.time() < end:
+            time.sleep(0.05)
+
+    def push(self, x):
+        """Feed IQ read by someone else (an RF-bench capture holding the dongle) into the same spectrum /
+        waterfall, in 64k blocks so the waterfall scrolls at the live rate."""
+        for i in range(0, len(x) - 64 * 1024 + 1, 64 * 1024):
+            self._publish(x[i:i + 64 * 1024])
+
+    def _publish(self, x):
+        # the dongle sits OFFSET above self.freq: shift so the display is centred on self.freq
+        s = np.roll(spectrum_db(x), OFFSET_BINS)
+        s[:OFFSET_BINS] = np.median(s)
+        with self._lock:
+            self.spec = s
+            self.peak = s if self.peak is None else np.maximum(s, self.peak - 0.3)
+            self.rows.append(s)
+            del self.rows[:-200]
 
     def tune(self, freq):
         self.freq = float(min(max(freq, 24e6), 1766e6))   # R820T range
@@ -123,12 +147,14 @@ class SdrSource:
                 if dev is not None:
                     self._close(dev)
                     dev = None
+                    self._open_dev = False
                     self.status = "idle"
                 time.sleep(0.2)
                 continue
             if dev is None:
                 try:
                     dev = self._open()
+                    self._open_dev = True
                     self._retune = False
                     self.status, self.error = "running", None
                 except Exception as e:                       # no dongle / busy / library
@@ -148,18 +174,12 @@ class SdrSource:
                 log.warning("sdr read failed: %s", e)
                 self._close(dev)
                 dev = None
+                self._open_dev = False
                 self.status, self.error = "SDR lost", str(e)[:60]
                 time.sleep(1)
                 continue
             self._audio(x)
-            # the dongle sits OFFSET above self.freq: shift so the display is centred on self.freq
-            s = np.roll(spectrum_db(x), OFFSET_BINS)
-            s[:OFFSET_BINS] = np.median(s)
-            with self._lock:
-                self.spec = s
-                self.peak = s if self.peak is None else np.maximum(s, self.peak - 0.3)
-                self.rows.append(s)
-                del self.rows[:-200]
+            self._publish(x)
 
     def snapshot(self):
         with self._lock:

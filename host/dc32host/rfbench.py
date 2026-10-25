@@ -20,9 +20,10 @@ CH_RATE = RATE / 8                    # 256 kHz after the channel filter: 3.9 us
 US = 1e6 / CH_RATE
 
 
-def capture(freq, seconds, during=None, gain=30):
+def capture(freq, seconds, during=None, gain=30, on_chunk=None):
     """Record `seconds` of IQ at `freq` (dongle at freq + OFFSET). `during()` runs once streaming has
-    started (e.g. tell the Flipper to transmit). Returns complex64 IQ at RATE."""
+    started (e.g. tell the Flipper to transmit); `on_chunk(iq)` sees every block as it arrives (the
+    bench's live waterfall). Returns complex64 IQ at RATE."""
     from rtlsdr import RtlSdr
     import threading
     for attempt in range(30):                             # another view may still be releasing it
@@ -47,6 +48,8 @@ def capture(freq, seconds, during=None, gain=30):
             x = dev.read_samples(256 * 1024)
             chunks.append(x.astype(np.complex64))
             got += len(x)
+            if on_chunk:
+                on_chunk(chunks[-1])
             started.set()
         return np.concatenate(chunks)[:n_want]
     finally:

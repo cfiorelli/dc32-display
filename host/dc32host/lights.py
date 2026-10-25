@@ -1,6 +1,7 @@
 """Badge LED modes (9 WS2812s; fw >= 0.2). Animated on the host at ~30 fps, 27 bytes per frame.
 
-Ctrl+Alt+G / FN > Lights cycles: off -> bright -> wave -> rainbow -> rave -> runner -> off.
+Ctrl+Alt+G / FN > Lights cycles: off -> bright -> breathe -> wave -> comet -> rainbow -> fire -> cpu ->
+police -> rave -> runner -> off.
 `runner` shows the self-hosted runner: soft green breathing when idle, amber pulse while a job runs,
 a green flash when a job just succeeded, slow red blink for 10 minutes after a failure.
 """

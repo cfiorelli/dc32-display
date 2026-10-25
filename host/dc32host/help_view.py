@@ -1,7 +1,8 @@
-"""Badge-native cheat sheet (Ctrl+Alt+H, or FN > Shortcuts), three pages:
-  1/3 views & apps (Ctrl+Alt+<key>); while help is open the number keys 1-9,0 open them
-  2/3 badge buttons
-  3/3 controls inside each app
+"""Badge-native cheat sheet (Ctrl+Alt+H, or FN > Shortcuts), four pages:
+  1/4 views & apps (Ctrl+Alt+<key>); while help is open the number keys 1-9,0 open them
+  2/4 badge buttons
+  3/4 controls inside each app
+  4/4 lights, view zoom/pan, sleep and the other non-view shortcuts
 Ctrl+Alt+H cycles the pages (wrapping); on the badge left/right turn pages; Esc or B closes.
 """
 from __future__ import annotations
@@ -29,10 +30,17 @@ BADGE = [("FN", "menu"), ("B", "back / close"),
 # Page 3 — what the controls do inside each view.
 APPS = [("Flipper", "D-pad move · A=OK · B=Back · Ctrl+Alt+Y = PC keys"),
         ("Spectrum", "◀▶ tune · ▲▼ step · A=band · START=audio"),
-        ("RF bench", "A=arm · START=verify · hold A=self-test · ◀▶ band"),
+        ("RF bench", "live waterfall · A=arm · START=verify · hold A=self-test · ◀▶ band"),
+        ("IR scope", "point a remote at the badge; frames are drawn and decoded"),
         ("Level", "hold flat, screen up; tilts like a ball to the low side"),
         ("Command menu", "↑↓ or type a letter · Enter run · Esc close")]
-PAGES = 3
+# Page 4 — everything that isn't a view.
+MORE = [("Lights", "Ctrl+Alt+G or FN > Lights: next mode — off, bright, breathe, wave, comet, rainbow, "
+                   "fire, CPU meter, police, rave, runner status"),
+        ("Zoom / pan", "Ctrl+Alt+Z zoom fit > 2:1 > 1:1 · X fit · I J K L move · badge A zoom, D-pad move"),
+        ("Keyboard", "Ctrl+Alt+Y: PC keys -> Flipper / spectrum / bench"),
+        ("Other", "Ctrl+Alt+S sleep · R refresh runner · FN ▲▼ brightness")]
+PAGES = 4
 ROW_SHADE = (34, 34, 33)
 
 _cache = {}
@@ -80,9 +88,9 @@ def render(page: int = 0) -> np.ndarray:
             d.text((x + kw[i % 2], y + 1), v, font=f_desc, fill=INK2)
         d.text((8, 224), "left/right: page · Esc or B closes", font=f_small, fill=MUTED)
     else:
-        _header(d, "App controls", page, f_title, f_small)
+        _header(d, "App controls" if page == 2 else "Lights & more", page, f_title, f_small)
         y = 35
-        for name, desc in APPS:
+        for name, desc in (APPS if page == 2 else MORE):
             d.text((8, y), name, font=f_key, fill=OK)
             y += 15
             # wrap the description to the width
