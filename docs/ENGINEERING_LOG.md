@@ -124,3 +124,34 @@ here. Nothing has been flashed and no backup has been taken yet.
 * Dashboard matching by command line could pick an unrelated window owned by gnome-terminal-server
   (one process owns every terminal window); shared window owners are now skipped.
 * X11 window rects now exclude GTK client-side-decoration shadows (`_GTK_FRAME_EXTENTS`).
+
+## 2026-10-25 — the Dell's HDD is retired
+
+The machine this was built and run on is being rebuilt, so everything that only existed on that
+disk is now in the GitHub repo. What was pushed:
+
+* `worktree-tap-tuner` — a tap-threshold (knock sensitivity) tuner, uncommitted in the main
+  checkout. Incomplete: the ctl action, the FN menu entry and accelerometer streaming are wired,
+  but the render loop has no `view == "accel"` branch, so the view does not draw yet.
+* `worktree-bench-waterfall` — uncommitted in the RF-bench checkout: a live waterfall while the
+  bench captures (`rfbench.capture(on_chunk=...)` feeding `sdr.push()`, plus `sdr.release()` so
+  the dongle hands over cleanly), a fourth cheat-sheet page for the non-view shortcuts, and the
+  full lights-mode list in place of the stale five.
+* `archive/master-original-history` — the pre-publish `master`, 7 commits ending at "Badge home
+  menu, runner cost view, typing follow, publish prep". It shares no history with `main` (the
+  published repo was started from a fresh root), so it is kept as its own branch.
+
+The ~50 `worktree-*` feature branches were already on the remote, as were the merges up to #69.
+
+**Deliberately not published, and gone with the disk unless copied off by hand:**
+
+* `backups/` and `~/dc32-badge-backups/` — the original full-flash dumps of this badge
+  (4 MiB each, stock 1.31). Irreplaceable for this badge: copy them somewhere else first.
+* `docs/LOCAL_NOTES.md` — the unredacted draft of this log. Its only content not already here is
+  the owner's name, the dashboard script's path and the backup's SHA-256; it is gitignored on
+  purpose. The backup hash belongs with the backup copies, not in the repo.
+* `firmware/dist/`, `tools/bin/`, `.deps/`, `.claude/` — all rebuildable or re-fetchable.
+
+Also brought up to date here: the README keyboard-shortcut table, which still listed only the six
+shortcuts from the first publish and none of the views added since (Flipper, SDR, RF bench, IR
+scope, level, system monitor, clock, Doom II, command menu, sleep, keyboard hand-off).

@@ -49,12 +49,26 @@ All mappings live in `~/.config/dc32-display/config.json` (`"buttons"`).
 
 | Keys | Action |
 |---|---|
-| Ctrl+Alt+B | runner cost view ↔ needs-you report (screen mirroring: FN menu or **B**) |
-| Ctrl+Alt+H | cheat sheet of every shortcut, on the badge |
+| Ctrl+Alt+B | runner cost view → needs-you report → backlog (screen mirroring: FN menu or **B**) |
+| Ctrl+Alt+M | command menu: every action from the keyboard (↑↓ or type a letter) |
+| Ctrl+Alt+H | cheat sheet of every shortcut, on the badge (cycles its pages) |
+| Ctrl+Alt+F | Flipper Zero: its live screen on the badge |
+| Ctrl+Alt+W | spectrum / waterfall from an RTL-SDR dongle |
+| Ctrl+Alt+V | RF bench: capture → decode → re-synthesise → replay → verify |
+| Ctrl+Alt+E | IR scope: what the badge's IR receiver sees, decoded |
+| Ctrl+Alt+O | level: the badge's accelerometer as a spirit level |
+| Ctrl+Alt+U | system monitor: clock, CPU per core, RAM, disk, net, temp, uptime |
+| Ctrl+Alt+C | clock screensaver |
+| Ctrl+Alt+P | Doom II on the badge |
+| Ctrl+Alt+S | sleep: screen off until any input (a knock-knock on the badge also works) |
+| Ctrl+Alt+R | refresh the runner data now |
+| Ctrl+Alt+Y | send the PC keyboard to the badge (Flipper / spectrum / bench), and back |
 | Ctrl+Alt+Z / Ctrl+Alt+X | zoom cycle / fit |
 | Ctrl+Alt+I / J / K / L | move the badge view up / left / down / right |
 | Ctrl+Alt+Up / Down | light level up / down (1-100%; the installer frees these two combos from GNOME's workspace up/down) |
-| Ctrl+Alt+G | next light mode (attention is the default) |
+| Ctrl+Alt+G | next light mode: off, bright, breathe, wave, comet, rainbow, fire, CPU meter, police, rave, runner status, attention (the default) |
+
+While the cheat sheet is open, the number keys **1**-**9**,**0** open the views in the order it lists them.
 
 Any action can be sent from a script: `dc32host ctl <action>` (e.g. `toggle_runner`, `toggle_report`, `leds_identify`, `led_brightness:25`, `home_menu`,
 `zoom_cycle`, `pan_left`, `toggle_pause`). `dc32host restart` restarts (or starts) the service.
