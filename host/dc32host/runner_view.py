@@ -22,7 +22,9 @@ from PIL import Image, ImageDraw, ImageFont
 from . import capture as C
 
 log = logging.getLogger("dc32.runner")
-STATE_FILE = Path.home() / ".cache" / "dc32-display" / "runner-state.json"   # last good snapshot (see _restore)
+# Job history and the last snapshot live under ~/.local/share, not ~/.cache: a cache clean forces a full refetch.
+DATA_DIR = Path.home() / ".local" / "share" / "dc32-display"
+STATE_FILE = DATA_DIR / "runner-state.json"   # last good snapshot (see _restore)
 
 W, H = C.OUT_W, C.OUT_H
 # dark chart surface + categorical slots 1/2 (validated pair), text inks, reserved status colours
@@ -126,7 +128,7 @@ class RunnerData:
             raise RuntimeError("no GitHub token (run the dashboard with --save-token)")
         now = dt.datetime.now(m.UTC)
         # own cache file: the terminal dashboard may be running and writing its own concurrently
-        cache = Path.home() / ".cache" / "dc32-display" / "runner-dashboard.json"
+        cache = DATA_DIR / "runner-dashboard.json"
         if not cache.exists() and m.CACHE_FILE.exists():
             cache.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(m.CACHE_FILE, cache)
