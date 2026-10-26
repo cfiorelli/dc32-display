@@ -1,0 +1,8 @@
+[Unit]
+Description=Recover a stalled DC32 badge main loop
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/share/dc32-display/venv/bin/python -m dc32host.watchdog
+TimeoutStartSec=15
+NoNewPrivileges=true

@@ -60,6 +60,9 @@ def cmd_run(a):
     if lock is None:
         logging.getLogger("dc32").error("another dc32host instance is already running")
         return 1
+    from .health import Progress, enable_diagnostics
+    diagnostics = enable_diagnostics()
+    progress = Progress()
     from .daemon import Daemon
     log = logging.getLogger("dc32")
     while True:     # at login the X display / session may not be ready yet: retry instead of dying
@@ -69,7 +72,7 @@ def cmd_run(a):
         except Exception as e:
             log.error("startup failed (%s); retrying in 5 s", e)
             time.sleep(5)
-    d.run()
+    d.run(progress=progress)
     return 0
 
 
