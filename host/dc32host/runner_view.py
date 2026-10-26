@@ -124,23 +124,23 @@ class RunnerData:
 
     def _setup(self):
         m = load_dashboard_module(self.script)
-        tok = m.load_token(m.TOKEN_FILE)
-        if not tok:
-            raise RuntimeError("no GitHub token (run the dashboard with --save-token)")
         now = dt.datetime.now(m.UTC)
         # own cache file: the terminal dashboard may be running and writing its own concurrently
         cache = DATA_DIR / "runner-dashboard.json"
         if not cache.exists() and m.CACHE_FILE.exists():
             cache.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(m.CACHE_FILE, cache)
-        self.mod, self.api = m, m.Api("https://api.github.com", tok)
+        self.mod, self.api = m, m.Api("https://api.github.com", "")
         local_now = now.astimezone()
-        self.st = m.State(local_now.year, local_now.month, m.SELF_HOSTED_SINCE, cache)
+        self.st = m.State(local_now.year, local_now.month, m.SELF_HOSTED_SINCE, None)
+        m.read_shared(self.st)
 
     def _restore(self):
         """Last good snapshot from STATE_FILE: the view shows it at once, and a restart within the
         refresh interval waits for the schedule instead of refetching everything."""
         m, st = self.mod, self.st
+        if hasattr(m, "SHARED_FILE"):
+            return
         try:
             s = json.loads(STATE_FILE.read_text())
         except (OSError, ValueError):
@@ -202,12 +202,11 @@ class RunnerData:
                     m.fetch_runs(st, self.api, now, max_job_calls=80)
                     v = _compute(m, st)
                     done, total = v.get("backfill", (0, 0))
-                    self._publish(v, st, dt.datetime.now(m.UTC))
+                    self._publish(v, st, st.jobs_at or dt.datetime.fromtimestamp(0, m.UTC))
                     # backfill quickly at first, then the configured cadence; a pass that hit an
                     # error (timeout, no access) retries in 15 min rather than leaving STALE for 2 h
                     err = self.error
-                    self.next_at = time.time() + (20 if done < total else min(900, self.refresh_s) if err
-                                                  else self.refresh_s)
+                    self.next_at = time.time() + self.refresh_s
                     self._synced = done >= total
                     self._save()
                     log.info("runner data: hosted MTD $%.2f, backfill %s/%s, api calls %s%s",
