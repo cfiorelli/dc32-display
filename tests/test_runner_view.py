@@ -112,7 +112,8 @@ class RunnerViewTest(unittest.TestCase):
             texts.append(text);return draw_text(draw,xy,text,*a,**kw)
         with patch.object(rv.ImageDraw.ImageDraw,'text',record):
             view(data).render(now=data.fixture['now'])
-        self.assertIn('new-runner',texts)
+        self.assertIn(rv.socket.gethostname().split('.', 1)[0],texts)
+        self.assertNotIn('new-runner',texts)
         self.assertTrue(any(t.endswith(' ago') for t in texts))            # 'Last update 5m ago' or '5m ago'
         self.assertIn('$24.62',texts)
         self.assertTrue(any(t.startswith('of $250, resets ') for t in texts))

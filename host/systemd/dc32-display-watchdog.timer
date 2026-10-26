@@ -1,0 +1,10 @@
+[Unit]
+Description=Check DC32 badge main-loop progress every 30 seconds
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=30s
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target

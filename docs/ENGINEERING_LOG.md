@@ -124,3 +124,26 @@ here. Nothing has been flashed and no backup has been taken yet.
 * Dashboard matching by command line could pick an unrelated window owned by gnome-terminal-server
   (one process owns every terminal window); shared window owners are now skipped.
 * X11 window rects now exclude GTK client-side-decoration shadows (`_GTK_FRAME_EXTENTS`).
+
+## 2026-10-26 — Dell host title and stall recovery
+
+The runner header uses the local hostname (`runner-host`) rather than the first API runner or systemd unit, so it names the machine running both `runner-a` and `runner-b`.
+
+The original PID 169879 stopped main-loop stats at 2026-10-25 15:52:30 PDT while the GitHub worker continued from 2567/5111 to 4959/5187 runs. Its main thread was runnable with 77.6% cumulative CPU; USB/worker threads remained alive. Logs and per-thread wait states were saved before termination. `py-spy dump` was denied by Linux ptrace policy; the original host had no SIGUSR1 handler. No original Python stack was obtainable through those methods. After a diagnostic restart, SIGUSR1 stacks showed the main loop waiting normally for input while the GitHub thread was in HTTPS fetches. An offline reconstructed 50% snapshot rendered and encoded successfully. The precise original spin location is **unconfirmed**, not attributed to the API worker.
+
+The existing background USB keepalive and ongoing fetch logs masked the stalled main loop. A separate progress record now advances only after a completed main-loop iteration (including sleep/menu/USB-disconnected paths). Stack-only diagnostics are registered before startup. The watchdog checks this progress, requests all thread stacks after 90 seconds without progress, terminates the identified Python child, and escalates to SIGKILL after three seconds if needed. The existing `run.sh` restarts the child. UID, executable, argv tokens and process start ticks are checked, and pidfds prevent signalling a reused PID. No process command line, environment or token is printed.
+
+Install the explicitly requested user timer after updating the host code:
+
+```sh
+mkdir -p ~/.config/systemd/user
+cp host/systemd/dc32-display-watchdog.{service,timer} ~/.config/systemd/user/
+loginctl enable-linger "$USER"
+systemctl --user daemon-reload
+systemctl --user enable --now dc32-display-watchdog.timer
+loginctl show-user "$USER" -p Linger
+```
+
+Unit: `dc32-display-watchdog.timer`. Interval: 30 seconds, accuracy one second. Recovery begins after 90–121 seconds of stalled progress. Progress: `~/.local/state/dc32-display/heartbeat.json`; diagnostic stacks: `~/.local/state/dc32-display/logs/stacks.log`. A missing/obsolete heartbeat never authorizes killing an unrelated process. The timer does not launch a GUI session or replace XDG autostart.
+
+Targeted validation: 34 tests passed (runner rendering, blocked API fetch/input independence, protocol, scheduling and watchdog decisions). The broader available suite had 108 passes and six failures: three missing optional scipy dependencies and three existing sleep-test stubs missing `view`; the latter were reproduced against the unchanged base daemon. X11 end-to-end/hardware-button tests were not run as part of that suite.

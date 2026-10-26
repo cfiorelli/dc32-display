@@ -1396,7 +1396,7 @@ class Daemon:
                   + P.set_ir(self.view == "ir"))
         self.say(f"DC32 Display host {__version__}", f"fw {self.badge.info.fw}")
 
-    def run(self, once_seconds: float | None = None):
+    def run(self, once_seconds: float | None = None, progress=None):
         log.info("dc32host %s starting, backend=%s, config=%s", __version__, self.be.name, CFG.config_path())
         t_end = time.time() + once_seconds if once_seconds else None
         if once_seconds is None:
@@ -1418,11 +1418,15 @@ class Daemon:
                         log.info("waiting for badge (USB %04x:%04x)...", P.USB_VID, P.USB_PID)
                         waiting_logged = True
                     time.sleep(1.0)
+                    if progress:
+                        progress.beat()
                     continue
             try:
                 t0 = time.time()
                 self._t_build = self._t_send = 0.0
                 self.tick()
+                if progress:
+                    progress.beat()
                 dt = time.time() - t0
                 if dt > 1.5:      # the badge shows "disconnected" after 3 s of silence; find what stalls
                     log.warning("slow tick: %.1f s (build %.1f s, send %.1f s, view=%s, shown=%s)", dt,

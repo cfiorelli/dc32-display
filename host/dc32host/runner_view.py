@@ -12,6 +12,7 @@ import json
 import logging
 import os
 import shutil
+import socket
 import threading
 import time
 from pathlib import Path
@@ -360,10 +361,8 @@ class RunnerView:
         now = _utc(now) or dt.datetime.now(dt.timezone.utc)
         img = Image.new("RGB", (W, H), BG)
         d = ImageDraw.Draw(img)
-        units = loc.get("units") or []
-        api = (v or {}).get("runner_api") or {}
-        name = api.get("name") or (units[0]["unit"].split(".")[-2]
-               if units and units[0].get("unit", "").count(".") >= 3 else "runner")
+        # Local probes cover this machine, which may run multiple runner services.
+        name = socket.gethostname().split(".", 1)[0] or "host"
         color, word = self.status(v, loc, err, updated, now)
 
         # Header: status, plus how old the GitHub numbers are (a long runner name gets truncated).
