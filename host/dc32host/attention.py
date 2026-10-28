@@ -3,7 +3,7 @@
 A separate process writes ~/.cache/dc32-display/attention.json (this daemon only reads it):
   {"at": "<ISO UTC>", "indicators": [{"id", "label", "lit", "level", "reason", "tag", "since", "link"}, ...]}
 reason is the descriptor under the label (an optional `segments` [{t, level}] draws it in one colour per piece) (the writer keeps it to 12 characters; an unlit indicator may still carry one);
-tag (Lab, Ops, API, Eng) is drawn before it in a category colour. since is not shown.
+A short tag is drawn before it in a category colour. since is not shown.
 Each indicator owns one LED (config `attention_leds`: id -> LED index) and one screen slot
 (config `attention_slots`: id -> "left_top" ... "right_low"). Lit = needs you, off = nothing for you.
 The badge has five front LEDs, placed around the screen: left top (beside the
@@ -213,8 +213,9 @@ TH_VIOLET = (164, 132, 196)    # clear labels
 TH_DIM = (98, 74, 128)
 TH_GLOW = (96, 30, 0)          # under a lit trace
 TH_SOFT = (128, 100, 160)      # descriptor of a clear signal that still has one (CI spend)
-# Category tag colours
-TAG_RGB = {"Lab": (0x5f, 0xd7, 0xff), "Ops": (0xff, 0xaf, 0x5f), "API": (0xff, 0x87, 0xd7), "Eng": (0xaf, 0xff, 0x5f)}
+# Standard categories use fixed colours; custom short tags use cyan.
+DEFAULT_TAG_RGB = (0x5f, 0xd7, 0xff)
+TAG_RGB = {"Ops": (0xff, 0xaf, 0x5f), "API": (0xff, 0x87, 0xd7), "Eng": (0xaf, 0xff, 0x5f)}
 L1W = 150                     # label + counts line; only the right column's "Priority blocked" (116 px) plus "2R 1Y" needs more than COLW
 COLW = 130                     # hard cap on a column's text width; left starts at x=22, right ends at x=298, so they never meet
 
@@ -327,7 +328,8 @@ def render(state, slots_map=None, now=None, boxes=None):
         countw = sum(cw) + 4 if runs else 0
         label = _fit(d, ind.get("label") or ind["id"].replace("_", " "), f_l, (L1W if runs else COLW) - countw)
         # descriptor: [tag] reason, one line, never wider than the column
-        tag = ind.get("tag") if lit and ind.get("tag") in TAG_RGB else ""
+        tag = ind.get("tag")
+        tag = tag if lit and isinstance(tag, str) and 0 < len(tag) <= 3 else ""
         tagw = d.textlength(tag + " ", font=f_tag) if tag else 0
         reason = "" if stale or not ind.get("reason") else _fit(d, str(ind["reason"]), f_d, COLW - tagw)
         # per-segment colours ("Cl 30% Cx 4%": each plan in its own level colour, neutral in the soft descriptor colour)
@@ -349,7 +351,7 @@ def render(state, slots_map=None, now=None, boxes=None):
             put(side, (cx, y + 2), t, f_cnt, c)
             cx += w
         if tag:
-            put(side, (dx, y + 31), tag, f_tag, TAG_RGB[tag], "ls")
+            put(side, (dx, y + 31), tag, f_tag, TAG_RGB.get(tag, DEFAULT_TAG_RGB), "ls")
         if pieces:
             px = dx + tagw
             for t, c in pieces:

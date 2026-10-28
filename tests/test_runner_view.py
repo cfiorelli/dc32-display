@@ -114,8 +114,8 @@ class RunnerViewTest(unittest.TestCase):
             view(data).render(now=data.fixture['now'])
         self.assertIn('new-runner',texts)
         self.assertTrue(any(t.endswith(' ago') for t in texts))            # 'Last update 5m ago' or '5m ago'
-        self.assertIn('$24.62',texts)
-        self.assertTrue(any(t.startswith('of $250, resets ') for t in texts))
+        self.assertIn('$12.34',texts)
+        self.assertTrue(any(t.startswith('of $80, resets ') for t in texts))
         # no savings line without a computed estimate
         self.assertFalse(any(term in ' '.join(texts).lower() for term in ('saved','12h','list price','paused')))
 
@@ -127,9 +127,9 @@ class RunnerViewTest(unittest.TestCase):
         with patch.object(rv.ImageDraw.ImageDraw,'text',record):
             view(data).render(now=data.fixture['now'])
         ys=dict(seen)
-        self.assertLess(ys['$12.50'],ys['$24.62'])
+        self.assertLess(ys['$12.50'],ys['$12.34'])
         self.assertIn('saved, rolling 30d',ys)
-        self.assertTrue(any(k.startswith('of $250, resets ') for k in ys))
+        self.assertTrue(any(k.startswith('of $80, resets ') for k in ys))
         self.assertTrue(all(y<=226 for _,y in seen))
 
     def test_errors_are_status_only_and_unknown_billing_is_not_zero(self):
@@ -178,7 +178,7 @@ class RunnerViewTest(unittest.TestCase):
             texts.append(text);return original(draw,xy,text,*a,**kw)
         with patch.object(rv.ImageDraw.ImageDraw,'text',record):frame=v.render(now=now)
         self.assertIn('$—',texts)
-        self.assertNotIn('$24.62',texts)
+        self.assertNotIn('$12.34',texts)
         self.assertEqual(tuple(frame[146,180]),rv.GRID)
 
     def test_refresh_button_still_kicks_existing_event(self):

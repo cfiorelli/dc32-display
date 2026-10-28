@@ -48,7 +48,7 @@ FIXTURES = {
     'two': doc(40, {'production': 'labbox off', 'pr_waiting': 'sample#12'}, {'pr_waiting': 'Ops'}),
     'stale': doc(25 * 60, {'production': 'Health down'}),
     'red': doc(40, {'priority_blocked': 'Demo task', 'spend': '$70/$80'}, {'priority_blocked': 'Lab'}, levels={'spend': 'red'}),
-    # all five lit with the longest real strings (the live state on 2026-10-13 plus the longest short a writer can emit)
+    # Synthetic descriptors exercise all five lights and the maximum display width.
     'longest': doc(40, {'priority_blocked': 'Lab account', 'production': 'deskpc off', 'spend': '$70/$80',
                         'capacity': 'Claude bal: 17%', 'pr_waiting': 'sample#1234'},
                    {'priority_blocked': 'Ops', 'pr_waiting': 'Ops'}, levels={'spend': 'red', 'capacity': 'red', 'production': 'yellow'}),
@@ -217,8 +217,13 @@ class Columns(unittest.TestCase):
         self.assertFalse((A.render(A.load(write(quiet), now=NOW), now=NOW) == A.render(A.load(write(bare), now=NOW), now=NOW)).all())
         self.assertEqual(A.lit_leds(A.load(write(quiet), now=NOW), A.DEFAULT_LEDS), set())
 
-    def test_tag_colour_follows_the_dashboard(self):
-        self.assertEqual(set(A.TAG_RGB), {'Lab', 'Ops', 'API', 'Eng'})
+    def test_standard_and_custom_tag_colours(self):
+        self.assertEqual(set(A.TAG_RGB), {'Ops', 'API', 'Eng'})
+        boxes = []
+        custom = A.render(A.load(write(FIXTURES['red']), now=NOW), now=NOW, boxes=boxes)
+        tag_box = min((b for b in boxes if b[0] == 'right' and 150 < b[2] < 170), key=lambda b: b[1])
+        _, x0, y0, x1, y1 = tag_box
+        self.assertTrue(((custom[y0:y1, x0:x1] == np.array(A.DEFAULT_TAG_RGB)).all(axis=2)).any())
         im = A.render(A.load(write(FIXTURES['api']), now=NOW), now=NOW)
         self.assertTrue(((im == np.array(A.TAG_RGB['API'])).all(axis=2)).any())
 
