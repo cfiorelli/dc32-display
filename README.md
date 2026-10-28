@@ -19,7 +19,7 @@ Actions runner cost view.
 |---|---|
 | ![Runner view: status, seven days of minutes, monthly share and billed budget](docs/img/runner-view.png) | ![Cheat sheet of keyboard shortcuts and badge buttons](docs/img/cheat-sheet.png) |
 
-Both are drawn natively at the badge's 320×240 (shown here at 2×; the runner view uses demo data).
+Both are drawn natively at the badge's 320×240 (shown here at 2×; all dashboard screens use synthetic data).
 
 ## Buttons
 
@@ -227,3 +227,14 @@ and 2) are inferred; if two look swapped, `dc32host ctl leds_identify` lights LE
 number on screen, then set `attention_leds`. Calling it again stops it.
 
 ![Report: nothing lit](docs/img/attention-none.png) ![Report: red and yellow](docs/img/attention-red.png) ![Report: stale](docs/img/attention-stale.png)
+
+## Sample data
+
+Documentation dashboard images are rendered from the synthetic fixtures in
+`tests/test_attention.py` and `tests/fixtures/runner-view.json`. They contain no
+live task titles, repository names or usage totals. The hardware photo shows this
+project running on a badge.
+
+The attention producer is an external integration. This repository only consumes
+`attention.json`; its schema and file location remain unchanged. Custom tags up to three characters
+use cyan, alongside the built-in Ops, API and Eng category colours.

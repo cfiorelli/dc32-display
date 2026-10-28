@@ -20,10 +20,10 @@
         "status": "online",
         "busy": false
       },
-      "actions_net": 24.62,
+      "actions_net": 12.34,
       "billing_ok": true,
       "budget": {
-        "amount": 250
+        "amount": 80
       },
       "queue": {
         "self": 0,
@@ -104,10 +104,10 @@
         "status": "online",
         "busy": true
       },
-      "actions_net": 24.62,
+      "actions_net": 12.34,
       "billing_ok": true,
       "budget": {
-        "amount": 250
+        "amount": 80
       },
       "queue": {
         "self": 0,
@@ -185,10 +185,10 @@
         "status": "online",
         "busy": false
       },
-      "actions_net": 24.62,
+      "actions_net": 12.34,
       "billing_ok": true,
       "budget": {
-        "amount": 250
+        "amount": 80
       },
       "queue": {
         "self": 3,
@@ -267,10 +267,10 @@
         "status": "online",
         "busy": false
       },
-      "actions_net": 24.62,
+      "actions_net": 12.34,
       "billing_ok": true,
       "budget": {
-        "amount": 250
+        "amount": 80
       },
       "queue": {
         "self": 0,
@@ -348,10 +348,10 @@
         "status": "online",
         "busy": false
       },
-      "actions_net": 24.62,
+      "actions_net": 12.34,
       "billing_ok": true,
       "budget": {
-        "amount": 250
+        "amount": 80
       },
       "queue": {
         "self": 0,
@@ -432,7 +432,7 @@
       "actions_net": 0,
       "billing_ok": true,
       "budget": {
-        "amount": 250
+        "amount": 80
       },
       "queue": {
         "self": 0,
@@ -510,7 +510,7 @@
         "status": "online",
         "busy": false
       },
-      "actions_net": 24.62,
+      "actions_net": 12.34,
       "billing_ok": true,
       "budget": null,
       "queue": {
