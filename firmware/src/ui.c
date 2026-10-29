@@ -80,7 +80,7 @@ void ui_draw_disconnected(const ui_status_t *st, bool full)
         snprintf(line, sizeof line, "fw %s  proto %d  %s", DC32_FW_VERSION, DC32_PROTO_VERSION, DC32_BUILD_ID);
         text_center(44, line, C_DIM, 1);
         ui_text(8, 196, "FN+START+SELECT 2s: USB flash mode", C_DIM, -1, 1);
-        ui_text(8, 214, "Buttons are tested live above.", C_DIM, -1, 1);
+        ui_text(8, 214, "FN: phone PIN keyboard", C_DIM, -1, 1);
     }
     // status block
     ui_fill(0, 68, W, 56, C_BG);
@@ -115,6 +115,24 @@ void ui_draw_bootsel_notice(void)
     ui_fill(0, 0, W, H, C_BG);
     text_center(90, "USB FLASH MODE", C_ACCENT, 2);
     text_center(130, "Rebooting to BOOTSEL...", C_TEXT, 1);
+}
+
+void ui_draw_pin(const char *digits, int len, int cur, const char *status, bool ready)
+{
+    ui_fill(0, 0, W, H, C_BG);
+    ui_fill(0, 0, W, 40, C_PANEL);
+    text_center(4, "PIN KEYBOARD", C_ACCENT, 2);
+    text_center(44, ready ? "Phone: keyboard connected" : "Phone: not connected (use OTG)", ready ? C_OK : C_WARN, 1);
+    int cw = FONT_W * 3 + 8, x0 = (W - len * cw) / 2;
+    for (int i = 0; i < len; i++) {
+        char d[2] = {digits[i], 0};
+        if (i == cur) ui_fill(x0 + i * cw, 70, cw - 4, 56, C_SEL);
+        ui_text(x0 + i * cw + 4, 74, d, C_TEXT, -1, 3);
+    }
+    text_center(140, status ? status : "", C_TEXT, 1);
+    ui_text(8, 178, "U/D digit  L/R move  SELECT: delete", C_DIM, -1, 1);
+    ui_text(8, 196, "A: type PIN + Enter on the phone", C_DIM, -1, 1);
+    ui_text(8, 214, "B: back", C_DIM, -1, 1);
 }
 
 #define MENU_HDR 22

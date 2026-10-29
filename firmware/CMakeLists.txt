@@ -9,7 +9,7 @@ set(CMAKE_C_STANDARD 11)
 
 set(DC32_FW_MAJOR 0)
 set(DC32_FW_MINOR 4)
-set(DC32_FW_PATCH 1)
+set(DC32_FW_PATCH 2)
 set(DC32_FW_VERSION "${DC32_FW_MAJOR}.${DC32_FW_MINOR}.${DC32_FW_PATCH}")
 math(EXPR DC32_BCD_DEVICE "${DC32_FW_MAJOR} * 256 + ${DC32_FW_MINOR} * 16 + ${DC32_FW_PATCH}")
 execute_process(COMMAND git rev-parse --short=7 HEAD WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
@@ -23,7 +23,7 @@ pico_sdk_init()
 
 add_executable(dc32_display
   src/main.c src/lcd.c src/buttons.c src/decoder.c src/ui.c src/usb_descriptors.c src/leds.c
-  src/sdcard.c src/msc_disk.c src/accel.c src/ir.c)
+  src/sdcard.c src/msc_disk.c src/accel.c src/ir.c src/hidkb.c)
 pico_generate_pio_header(dc32_display ${CMAKE_CURRENT_SOURCE_DIR}/src/lcd_spi.pio)
 pico_generate_pio_header(dc32_display ${CMAKE_CURRENT_SOURCE_DIR}/src/ws2812.pio)
 target_include_directories(dc32_display PRIVATE src ../protocol ${CMAKE_CURRENT_BINARY_DIR})

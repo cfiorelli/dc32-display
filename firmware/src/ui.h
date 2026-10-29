@@ -35,3 +35,4 @@ void ui_draw_disconnected(const ui_status_t *st, bool full);
 void ui_menu_draw(const ui_menu_t *m);
 void ui_menu_move(ui_menu_t *m, int delta);
 void ui_draw_bootsel_notice(void);
+void ui_draw_pin(const char *digits, int len, int cur, const char *status, bool ready);

@@ -18,6 +18,7 @@
 #include "buttons.h"
 #include "dc32proto.h"
 #include "decoder.h"
+#include "hidkb.h"
 #include "lcd.h"
 #include "ui.h"
 #include "version.h"
@@ -32,7 +33,7 @@ bi_decl(bi_program_url("dc32-display (local project)"));
 #define RX_CHUNK            4096
 #define RX_BUDGET           (24 * 1024)   // max bytes decoded per loop pass (keeps buttons responsive)
 
-typedef enum { SCR_DISCONNECTED, SCR_STREAM, SCR_MENU } screen_t;
+typedef enum { SCR_DISCONNECTED, SCR_STREAM, SCR_MENU, SCR_PIN } screen_t;
 
 static decoder_t s_dec;
 static ui_menu_t s_menu;
@@ -46,6 +47,12 @@ static uint32_t s_decode_us_acc;
 static uint32_t s_frames_acked;
 static uint16_t s_last_btn_drawn = 0xffff;
 static const char *s_note;
+
+#define PIN_MAX 8
+static char s_pin[PIN_MAX + 1] = "0000";   // never stored; entered on the badge each time
+static int s_pin_len = 4, s_pin_cur;
+static const char *s_pin_status;
+static bool s_pin_ready_drawn;
 
 static inline uint32_t now_ms(void) { return to_ms_since_boot(get_absolute_time()); }
 
@@ -235,8 +242,40 @@ static void on_err(decoder_t *d, uint8_t code, uint32_t detail)
 void app_reset_stream(void) { s_reset_req = true; }   // called from USB control request
 
 // ---------------------------------------------------------------- buttons
+static void handle_pin_button(const btn_event_t *ev)
+{
+    bool press = ev->ev == DC32_EV_DOWN || ev->ev == DC32_EV_REPEAT;
+    if (hidkb_busy()) return;
+    if (press && (ev->btn == DC32_BTN_UP || ev->btn == DC32_BTN_DOWN)) {
+        char *c = &s_pin[s_pin_cur];
+        *c = (char)('0' + ((*c - '0') + (ev->btn == DC32_BTN_UP ? 1 : 9)) % 10);
+    } else if (press && ev->btn == DC32_BTN_RIGHT) {
+        if (s_pin_cur + 1 < s_pin_len) s_pin_cur++;
+        else if (s_pin_len < PIN_MAX) { s_pin[s_pin_len++] = '0'; s_pin[s_pin_len] = 0; s_pin_cur++; }
+    } else if (press && ev->btn == DC32_BTN_LEFT) {
+        if (s_pin_cur > 0) s_pin_cur--;
+    } else if (ev->ev == DC32_EV_SHORT && ev->btn == DC32_BTN_SELECT) {
+        if (s_pin_len > 4) { s_pin[--s_pin_len] = 0; if (s_pin_cur >= s_pin_len) s_pin_cur = s_pin_len - 1; }
+    } else if (ev->ev == DC32_EV_SHORT && ev->btn == DC32_BTN_A) {
+        if (!hidkb_ready()) { s_pin_status = "No keyboard host: plug into the phone first"; }
+        else { hidkb_type_pin(s_pin); s_pin_status = "Typing..."; }
+    } else if (ev->ev == DC32_EV_SHORT && ev->btn == DC32_BTN_B) {
+        s_pin_status = NULL;
+        enter_screen(SCR_DISCONNECTED);
+        return;
+    } else {
+        return;
+    }
+    s_screen_dirty = true;
+}
+
 static void handle_button(const btn_event_t *ev)
 {
+    if (s_screen == SCR_PIN) { handle_pin_button(ev); return; }
+    if (s_screen == SCR_DISCONNECTED && ev->ev == DC32_EV_SHORT && ev->btn == DC32_BTN_FN) {
+        enter_screen(SCR_PIN);
+        return;
+    }
     if (s_screen == SCR_MENU) {
         bool act = ev->ev == DC32_EV_SHORT || ev->ev == DC32_EV_DOWN || ev->ev == DC32_EV_REPEAT;
         if ((ev->btn == DC32_BTN_UP || ev->btn == DC32_BTN_DOWN) && (ev->ev == DC32_EV_DOWN || ev->ev == DC32_EV_REPEAT)) {
@@ -346,7 +385,7 @@ int main(void)
             budget = n >= budget ? 0 : budget - n;
             if (!s_host_alive) {
                 s_host_alive = true;
-                if (s_screen == SCR_DISCONNECTED) enter_screen(SCR_STREAM);
+                if (s_screen == SCR_DISCONNECTED || s_screen == SCR_PIN) enter_screen(SCR_STREAM);
             }
             tud_task();
         }
@@ -392,6 +431,9 @@ int main(void)
         btn_event_t ev;
         while (buttons_next(&ev)) handle_button(&ev);
         check_bootsel_combo(now);
+        bool was_typing = hidkb_busy();
+        hidkb_task(now);
+        if (was_typing && !hidkb_busy()) { s_pin_status = "Sent. B: back, A: send again"; s_screen_dirty = true; }
 
         // badge-native screens (rate-limited)
         if (now - last_ui >= 40) {
@@ -400,6 +442,11 @@ int main(void)
                                   s_frames_acked, now / 1000, s_note};
                 ui_draw_disconnected(&st, s_screen_dirty);
                 s_last_btn_drawn = buttons_down();
+                s_screen_dirty = false;
+                last_ui = now;
+            } else if (s_screen == SCR_PIN && (s_screen_dirty || hidkb_ready() != s_pin_ready_drawn)) {
+                s_pin_ready_drawn = hidkb_ready();
+                ui_draw_pin(s_pin, s_pin_len, s_pin_cur, s_pin_status, s_pin_ready_drawn);
                 s_screen_dirty = false;
                 last_ui = now;
             } else if (s_screen == SCR_MENU && s_screen_dirty) {

@@ -114,6 +114,7 @@ class Daemon:
         self.inflight: dict[int, tuple[float, float]] = {}   # id -> (t_capture, t_sent)
         self.menu_open_until = 0.0
         self.menu_table: dict[int, object] = {}
+        self.menu_group = "home"
         self.toast: tuple[float, list[str]] | None = None
         self.info_until = 0.0
         self.last_change = 0.0
@@ -892,33 +893,52 @@ class Daemon:
         t = (fav.get("match") or {}).get("title")
         return bool(t and re.search(t, wi.title or ""))
 
-    def open_home(self):
-        items = [
-            ("Mirror screen", "view_mirror", self.view == "mirror"),
-            ("Runner costs", "view_runner", self.view == "runner"),
-            ("Needs-you report", "view_report", self.view == "report"),
-            ("Backlog", "view_backlog", self.view == "backlog"),
-            ("Badge terminal", "badge_terminal", bool(self.shown and self.shown.title == "Badge Terminal")),
-            ("Switch app...", "app_switcher", False),
-            (f"Zoom: {self.vp.zoom} (A cycles)", "zoom_cycle", False),
-            ("Open dashboard on PC", "open_dashboard", False),
-            ("Resume display" if self.view == "paused" else "Pause display", "toggle_pause", self.view == "paused"),
-            (f"Lights: {self.lights.mode} (Ctrl+Alt+G)", "lights_next", self.lights.mode != "off"),
-            ("Shortcuts (Ctrl+Alt+H)", "toggle_help", self.view == "help"),
-            ("IR scope (Ctrl+Alt+E)", "ir_scope", self.view == "ir"),
-            ("Flipper Zero (Ctrl+Alt+F)", "flipper", self.view == "flipper"),
-            ("Spectrum / SDR (Ctrl+Alt+W)", "sdr_view", self.view == "sdr"),
-            ("RF bench (Ctrl+Alt+V)", "rf_bench", self.view == "bench"),
-            ("Tap tuner (knock sens.)", "accel_tune", self.view == "accel"),
-            ("Sleep: screen off (Ctrl+Alt+S)", "sleep", False),
-            ("Status info", "info", False),
-        ]
+    def _home_groups(self):
+        v = self.view
+        on = lambda b: " (on)" if b else ""
+        return {
+            "home": ("Menu", [
+                ("Screens >", "sub:screens"),
+                ("Radio & sensors >", "sub:radio"),
+                ("Display settings >", "sub:display"),
+                ("Switch PC app >", "app_switcher"),
+                ("Help: buttons & keys", "toggle_help"),
+                ("Badge status", "info"),
+            ]),
+            "screens": ("Screens", [
+                ("Mirror PC screen" + on(v == "mirror"), "view_mirror"),
+                ("CI runner costs" + on(v == "runner"), "view_runner"),
+                ("Things needing you" + on(v == "report"), "view_report"),
+                ("Backlog" + on(v == "backlog"), "view_backlog"),
+                ("Terminal on badge" + on(bool(self.shown and self.shown.title == "Badge Terminal")), "badge_terminal"),
+                ("Open runner dashboard on PC", "open_dashboard"),
+            ]),
+            "radio": ("Radio & sensors", [
+                ("Infrared scope" + on(v == "ir"), "ir_scope"),
+                ("Flipper Zero" + on(v == "flipper"), "flipper"),
+                ("Radio spectrum (SDR)" + on(v == "sdr"), "sdr_view"),
+                ("RF test bench" + on(v == "bench"), "rf_bench"),
+                ("Knock sensitivity" + on(v == "accel"), "accel_tune"),
+            ]),
+            "display": ("Display settings", [
+                (f"Zoom: {self.vp.zoom}", "zoom_cycle"),
+                (f"LED lights: {self.lights.mode}", "lights_next"),
+                ("Resume display" if v == "paused" else "Pause display", "toggle_pause"),
+                ("Screen off (sleep)", "sleep"),
+            ]),
+        }
+
+    def open_home(self, group: str = "home"):
+        title, items = self._home_groups()[group]
+        if group != "home":
+            items = [("< Back", "sub:home")] + items
         entries, self.menu_table = [], {}
-        for i, (label, act, on) in enumerate(items):
+        for i, (label, act) in enumerate(items):
             eid = HOME_ID_BASE | i
-            entries.append((eid, P.MENU_FLAG_ACTIVE if on else 0, label))
-            self.menu_table[eid] = ("action", act)
-        self.send(P.menu_list("DC32 Display", entries, 0))
+            entries.append((eid, 0, label))
+            self.menu_table[eid] = ("sub", act[4:]) if act.startswith("sub:") else ("action", act)
+        self.menu_group = group
+        self.send(P.menu_list(title, entries, 0))
         self.menu_open_until = time.time() + 60
 
     # ================================================================ app switcher
@@ -951,6 +971,7 @@ class Daemon:
                 entries.append((eid, P.MENU_FLAG_FAVORITE, f"{fav['name']} (start)"))
                 self.menu_table[eid] = fav
         sel = 1 if len(entries) > 1 and entries[0][2] and (entries[0][1] & P.MENU_FLAG_ACTIVE) else 0
+        self.menu_group = "home"
         self.send(P.menu_list("Switch app", entries, sel))
         self.menu_open_until = time.time() + 60
 
@@ -958,8 +979,14 @@ class Daemon:
         self.menu_open_until = 0.0
         self.force_refresh()
         if r.action == P.MENU_CANCEL:
+            if self.menu_group != "home":
+                self.open_home()             # B in a submenu goes back up one level
+            self.menu_group = "home"
             return
         target = self.menu_table.get(r.entry_id)
+        if isinstance(target, tuple) and target[0] == "sub":
+            self.open_home(target[1])
+            return
         if target is None:
             return
         if isinstance(target, tuple) and target[0] == "action":   # home menu entry

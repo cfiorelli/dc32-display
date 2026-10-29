@@ -1,12 +1,13 @@
 // USB composite: interface 0 = vendor bulk (display stream + events, WinUSB via MS OS 2.0),
-// interfaces 1-2 = CDC ACM (human-readable debug log), interface 3 = mass storage (the microSD card).
+// interfaces 1-2 = CDC ACM (human-readable debug log), interface 3 = mass storage (the microSD card),
+// interface 4 = HID keyboard (types a PIN into a phone over OTG).
 #include <string.h>
 #include "tusb.h"
 #include "pico/unique_id.h"
 #include "dc32proto.h"
 #include "version.h"
 
-enum { ITF_VENDOR = 0, ITF_CDC, ITF_CDC_DATA, ITF_MSC, ITF_TOTAL };
+enum { ITF_VENDOR = 0, ITF_CDC, ITF_CDC_DATA, ITF_MSC, ITF_HID, ITF_TOTAL };
 
 #define EP_VENDOR_OUT 0x01
 #define EP_VENDOR_IN  0x81
@@ -15,6 +16,7 @@ enum { ITF_VENDOR = 0, ITF_CDC, ITF_CDC_DATA, ITF_MSC, ITF_TOTAL };
 #define EP_CDC_NOTIF  0x83
 #define EP_MSC_OUT    0x04
 #define EP_MSC_IN     0x84
+#define EP_HID_IN     0x85
 
 #define VENDOR_REQ_MS 0x20   // bMS_VendorCode for MS OS 2.0
 
@@ -37,13 +39,16 @@ static const tusb_desc_device_t desc_device = {
 
 uint8_t const *tud_descriptor_device_cb(void) { return (uint8_t const *)&desc_device; }
 
-#define CONFIG_TOTAL_LEN (TUD_CONFIG_DESC_LEN + TUD_VENDOR_DESC_LEN + TUD_CDC_DESC_LEN + TUD_MSC_DESC_LEN)
+#define CONFIG_TOTAL_LEN (TUD_CONFIG_DESC_LEN + TUD_VENDOR_DESC_LEN + TUD_CDC_DESC_LEN + TUD_MSC_DESC_LEN + TUD_HID_DESC_LEN)
+
+static const uint8_t desc_hid_report[] = { TUD_HID_REPORT_DESC_KEYBOARD() };
 
 static const uint8_t desc_config[] = {
     TUD_CONFIG_DESCRIPTOR(1, ITF_TOTAL, 0, CONFIG_TOTAL_LEN, 0x00, 250),
     TUD_VENDOR_DESCRIPTOR(ITF_VENDOR, 4, EP_VENDOR_OUT, EP_VENDOR_IN, 64),
     TUD_CDC_DESCRIPTOR(ITF_CDC, 5, EP_CDC_NOTIF, 8, EP_CDC_OUT, EP_CDC_IN, 64),
     TUD_MSC_DESCRIPTOR(ITF_MSC, 6, EP_MSC_OUT, EP_MSC_IN, 64),
+    TUD_HID_DESCRIPTOR(ITF_HID, 7, HID_ITF_PROTOCOL_KEYBOARD, sizeof(desc_hid_report), EP_HID_IN, 8, 10),
 };
 
 uint8_t const *tud_descriptor_configuration_cb(uint8_t index) { (void)index; return desc_config; }
@@ -101,7 +106,7 @@ bool tud_vendor_control_xfer_cb(uint8_t rhport, uint8_t stage, tusb_control_requ
 
 // ---- strings ----
 static const char *const s_strings[] = {
-    NULL, "DEF CON 32 badge (dc32-display)", DC32_USB_PRODUCT, NULL, "DC32 Display Stream", "DC32 Display Debug Log", "DC32 Badge microSD",
+    NULL, "DEF CON 32 badge (dc32-display)", DC32_USB_PRODUCT, NULL, "DC32 Display Stream", "DC32 Display Debug Log", "DC32 Badge microSD", "DC32 PIN Keyboard",
 };
 
 static uint16_t s_desc_str[48];
