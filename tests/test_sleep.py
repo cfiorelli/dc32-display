@@ -19,6 +19,7 @@ def stub(idle_s):
     d.sleeping, d.sleep_t, d.dimmed, d.brightness = False, 0.0, False, 22
     d._tap_last = 0.0
     d._knock_t = 0.0
+    d.view = 'mirror'
     d.prev, d._leds_last, d.last_badge_input = object(), None, 0.0
     d.force_refresh = lambda: setattr(d, 'prev', None)
     d.cfg = {'buttons': {'a.short': 'zoom_cycle'}}
