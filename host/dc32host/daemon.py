@@ -19,6 +19,7 @@ from .device import Badge, Disconnected
 log = logging.getLogger("dc32.daemon")
 
 MODES = ["follow", "pinned", "desktop"]
+ENGINEERING_SCREENS = ["view_runner"]   # Engineering mgmt: D-pad left/right order; add later views here
 def E_black_frame(d):
     """Full black frame (sleep): encoded like any other frame so the badge clears to it."""
     import numpy as np
@@ -29,10 +30,10 @@ def E_black_frame(d):
 
 
 TAP_BURST_GAP = 0.18  # events closer than this are one knock ringing (measured: <= 0.1 s apart)
+START_DOUBLE_S = 0.6  # START START: the second tap lands within this of the first
 KNOCK_WINDOW = (0.18, 1.0)  # knock-knock: the second knock starts this long after the first
 RESYNC_GAP_S = 2.5    # firmware HOST_TIMEOUT_MS is 3000: past this the badge may have blanked
 ZOOM_CYCLE = ["fit", "2x", "1x"]
-FAV_ID_BASE = 0x80000000
 HOME_ID_BASE = 0x40000000
 BASHRC = __import__("os").path.join(__import__("os").path.dirname(__file__), "badge_bashrc")
 DOOM2_SH = __import__("os").path.expanduser("~/.local/share/dc32-display/doom/doom2.sh")
@@ -218,6 +219,7 @@ class Daemon:
         if not self.sleeping:
             return
         self.sleeping = False
+        self.switched_off = False
         self.dimmed = False
         self.last_badge_input = time.time()
         self.send(P.set_brightness(self.brightness))
@@ -249,6 +251,8 @@ class Daemon:
 
     def check_wake(self):
         """PC input after the sleep command (1 s grace: the shortcut's own keys) wakes the badge."""
+        if getattr(self, "switched_off", False):     # off via START START: only START START turns it back on
+            return
         idle_ms = self.be._idle_ms() if hasattr(self.be, "_idle_ms") else None
         if idle_ms is not None and time.time() - idle_ms / 1000.0 > self.sleep_t + 1.0:
             self.wake("PC input")
@@ -482,8 +486,6 @@ class Daemon:
             idx = next((i for i, w in enumerate(wins) if w.handle == cur), 0)
             step = 1 if name == "next_app" else -1
             self.show_and_focus(wins[(idx + step) % len(wins)])
-        elif name == "app_switcher":
-            self.open_switcher()
         elif name in ("dashboard", "open_dashboard"):     # full terminal dashboard on the PC
             self.view = "mirror"
             self.open_favorite(self.cfg.get("dashboard_favorite", "GitHub Runner Dashboard"))
@@ -491,13 +493,6 @@ class Daemon:
             self.open_home()
         elif name in ("view_runner", "toggle_runner"):
             self.set_view("mirror" if (name == "toggle_runner" and self.view == "runner") else "runner")
-        elif name in ("view_report", "toggle_report"):   # Ctrl+Alt+B: runner costs <-> needs-you report
-            if name == "view_report":
-                self.set_view("report")
-            else:        # runner -> report -> backlog -> runner
-                self.set_view({"runner": "report", "report": "backlog"}.get(self.view, "runner"))
-        elif name == "view_backlog":
-            self.set_view("backlog")
         elif name == "leds_identify":      # light LED 0..8 in turn and show its index (confirms attention_leds)
             if self._identify is not None:
                 self.stop_identify()
@@ -764,7 +759,7 @@ class Daemon:
             self.say({"mirror": "Mirroring screen", "runner": "Runner costs", "paused": "Display paused",
                       "ir": "IR scope", "flipper": "Flipper", "sdr": "Spectrum (SDR)",
                       "bench": "RF bench", "sys": "System monitor", "clock": "Clock",
-                      "level": "Level", "report": "Needs-you report", "backlog": "Backlog", "identify": "LED identify",
+                      "level": "Level", "identify": "LED identify",
                       "accel": "Tap tuner"}[view],
                      "Ctrl+Alt+Y: keyboard -> badge" if view in self.KEYBOARD_VIEWS
                      else "FN: menu" if view != "mirror" else "")
@@ -901,24 +896,18 @@ class Daemon:
                 ("Screens >", "sub:screens"),
                 ("Radio & sensors >", "sub:radio"),
                 ("Display settings >", "sub:display"),
-                ("Switch PC app >", "app_switcher"),
                 ("Help: buttons & keys", "toggle_help"),
                 ("Badge status", "info"),
             ]),
             "screens": ("Screens", [
-                ("Mirror PC screen" + on(v == "mirror"), "view_mirror"),
-                ("CI runner costs" + on(v == "runner"), "view_runner"),
-                ("Things needing you" + on(v == "report"), "view_report"),
-                ("Backlog" + on(v == "backlog"), "view_backlog"),
-                ("Terminal on badge" + on(bool(self.shown and self.shown.title == "Badge Terminal")), "badge_terminal"),
-                ("Open runner dashboard on PC", "open_dashboard"),
+                ("Engineering mgmt" + on(v == "runner"), "view_runner"),
+                ("Machine" + on(v == "mirror"), "badge_terminal"),
             ]),
             "radio": ("Radio & sensors", [
                 ("Infrared scope" + on(v == "ir"), "ir_scope"),
                 ("Flipper Zero" + on(v == "flipper"), "flipper"),
                 ("Radio spectrum (SDR)" + on(v == "sdr"), "sdr_view"),
                 ("RF test bench" + on(v == "bench"), "rf_bench"),
-                ("Knock sensitivity" + on(v == "accel"), "accel_tune"),
             ]),
             "display": ("Display settings", [
                 (f"Zoom: {self.vp.zoom}", "zoom_cycle"),
@@ -941,40 +930,6 @@ class Daemon:
         self.send(P.menu_list(title, entries, 0))
         self.menu_open_until = time.time() + 60
 
-    # ================================================================ app switcher
-    def open_switcher(self):
-        wins = [w for w in self.be.list_windows() if not self.excluded(w)]
-        order = {h: i for i, h in enumerate(self.mru)}
-        wins.sort(key=lambda w: order.get(w.handle, 1000))
-        fg = self.be.foreground()
-        favs = self.cfg.get("favorites", [])
-        fav_handles = {}
-        for fi, fav in enumerate(favs):
-            wi = self.match_favorite(fav, wins)
-            if wi:
-                fav_handles[wi.handle] = fav["name"]
-        entries, self.menu_table = [], {}
-        for i, w in enumerate(wins[:44]):
-            flags = 0
-            if fg and w.handle == fg.handle:
-                flags |= P.MENU_FLAG_ACTIVE
-            if w.handle in fav_handles:
-                flags |= P.MENU_FLAG_FAVORITE
-            if self.mode == "pinned" and w.handle == self.pinned:
-                flags |= P.MENU_FLAG_PINNED
-            name = fav_handles.get(w.handle) or w.label
-            entries.append((i, flags, name))
-            self.menu_table[i] = w
-        for fi, fav in enumerate(favs):       # favorites that aren't running yet
-            if fav["name"] not in fav_handles.values() and fav.get("launch"):
-                eid = FAV_ID_BASE | fi
-                entries.append((eid, P.MENU_FLAG_FAVORITE, f"{fav['name']} (start)"))
-                self.menu_table[eid] = fav
-        sel = 1 if len(entries) > 1 and entries[0][2] and (entries[0][1] & P.MENU_FLAG_ACTIVE) else 0
-        self.menu_group = "home"
-        self.send(P.menu_list("Switch app", entries, sel))
-        self.menu_open_until = time.time() + 60
-
     def on_menu_result(self, r: P.MenuResult):
         self.menu_open_until = 0.0
         self.force_refresh()
@@ -992,19 +947,45 @@ class Daemon:
         if isinstance(target, tuple) and target[0] == "action":   # home menu entry
             self.action(target[1])
             return
-        if isinstance(target, dict):           # favorite to launch
-            self.open_favorite(target["name"])
-            return
-        self.view = "mirror"
-        if r.action == P.MENU_PIN:
-            self.mode, self.pinned = "pinned", target.handle
-            self.vp.reset()
-            self.say("Pinned", target.label)
-        else:
-            self.show_and_focus(target)
 
     # ================================================================ events
+    def start_tap(self):
+        """One START tap. The second within START_DOUBLE_S switches the badge off or on; True if it did."""
+        now = time.time()
+        prev, self._start_t = getattr(self, "_start_t", 0.0), now
+        if now - prev > START_DOUBLE_S:
+            return False
+        self._start_t = 0.0
+        if self.sleeping:
+            self.wake("START START")
+        else:
+            self.sleep()
+            self.switched_off = True
+        return True
+
+    def screen_cycle(self, ev):
+        """D-pad left/right walks the current screen group; True if the press was used. A zoomed mirror keeps panning."""
+        if ev.button not in ("left", "right") or ev.fn_held:
+            return False
+        if self.view == "runner":
+            group = ENGINEERING_SCREENS
+            if ev.event == "short" and len(group) > 1:
+                self.action(group[(group.index("view_runner") + (1 if ev.button == "right" else -1)) % len(group)])
+            return True
+        if self.view == "mirror" and self.vp.zoom == "fit":     # Machine: badge terminal <-> whole PC screen
+            if ev.event == "short":
+                if self.mode == "desktop":
+                    self.action("badge_terminal")
+                else:
+                    self.set_mode("desktop")
+            return True
+        return False
+
     def on_button(self, ev: P.ButtonEvent):
+        if getattr(self, "switched_off", False):     # really off: every other press is ignored
+            if ev.button == "start" and ev.event == "short" and not ev.fn_held:
+                self.start_tap()
+            return
         self.last_badge_input = time.time()
         if self.sleeping:                    # any press wakes; it does nothing else
             self.wake("badge button")
@@ -1016,6 +997,8 @@ class Daemon:
         if getattr(self, "_swallow", None) == ev.button:
             if ev.event in ("short", "long"):
                 self._swallow = None
+            return
+        if ev.button == "start" and ev.event == "short" and not ev.fn_held and self.start_tap():
             return
         if ev.button == "fn":
             if ev.event == "down":
@@ -1067,6 +1050,8 @@ class Daemon:
                 av.clear()
             elif ev.event == "short" and ev.button == "b":
                 self.set_view("mirror")
+            return
+        if self.screen_cycle(ev):
             return
         prefix = "fn+" if ev.fn_held else ""
         key = f"{prefix}{ev.button}.{ev.event}"
@@ -1161,12 +1146,6 @@ class Daemon:
             return time.time(), C.placeholder(["Display paused", "FN: menu  |  FN > Resume"]), False
         if self.view == "runner":
             return time.time(), self.runner_frame(), False
-        if self.view == "report":
-            from . import attention as A
-            return time.time(), A.render(self.attention_state(), self.cfg.get("attention_slots")), False
-        if self.view == "backlog":
-            from . import attention as A
-            return time.time(), A.render_backlog(A.load_order(self.cfg.get("eng_order_file")), self.attention_state().get("backlog")), False
         if self.view == "identify":
             from . import attention as A
             idx = A.identify_frame(self._identify, time.time())[1] if self._identify is not None else None
@@ -1415,6 +1394,7 @@ class Daemon:
         self.force_refresh()
         self.menu_open_until = 0.0
         self.dimmed = False
+        self.sleeping = self.switched_off = False   # a badge just powered on is on
         self.last_badge_input = time.time()
         self._leds_last = None
         if self.cfg.get("reset_view_on_connect", True):   # badge power-on shows the default view, not the last one

@@ -28,6 +28,46 @@ def stub(idle_s):
 
 
 class Sleep(unittest.TestCase):
+    def press(self, d, button, t):
+        with patch.object(D.time, 'time', lambda: t):
+            d.on_button(SimpleNamespace(button=button, event='short', held=(), fn_held=False))
+
+    def test_start_start_is_a_real_off_switch(self):
+        d = stub([999.0])
+        self.press(d, 'start', 100.0)
+        self.assertFalse(d.sleeping)                    # one tap: nothing
+        self.press(d, 'start', 100.4)
+        self.assertTrue(d.sleeping)
+        self.press(d, 'a', 101.0)
+        d.be._idle_ms = lambda: 0                       # PC input and other buttons don't turn it on
+        d.check_wake()
+        self.assertTrue(d.sleeping)
+        self.press(d, 'start', 110.0)
+        self.assertTrue(d.sleeping)                     # lone tap while off
+        self.press(d, 'start', 110.4)
+        self.assertFalse(d.sleeping)
+
+    def test_slow_start_taps_do_nothing(self):
+        d = stub([999.0])
+        self.press(d, 'start', 100.0)
+        self.press(d, 'start', 101.0)
+        self.assertFalse(d.sleeping)
+
+    def test_dpad_cycles_machine_screens_unless_zoomed(self):
+        d = stub([999.0])
+        d.mode, d.vp = 'follow', SimpleNamespace(zoom='fit')
+        modes = []
+        d.set_mode = modes.append
+        self.press(d, 'right', 100.0)
+        self.assertEqual(modes, ['desktop'])
+        d.mode = 'desktop'
+        self.press(d, 'left', 101.0)
+        self.assertEqual(d.actions, ['badge_terminal'])
+        d.vp.zoom = '2:1'
+        d.cfg['buttons']['right.short'] = 'pan_right'
+        self.press(d, 'right', 102.0)
+        self.assertEqual(d.actions, ['badge_terminal', 'pan_right'])
+
     def test_sleep_turns_backlight_off_and_input_wakes_after_grace(self):
         idle = [0.0]
         d = stub(idle)
@@ -89,7 +129,7 @@ class Sleep(unittest.TestCase):
 
     def test_help_number_keys(self):
         from dc32host.help_view import NUMBERED, KEYS
-        self.assertEqual(NUMBERED[:2], ['toggle_report', 'flipper'])
+        self.assertEqual(NUMBERED[:2], ['toggle_runner', 'flipper'])
         self.assertEqual(len(NUMBERED), len(KEYS))
         d = stub([0.0])
         views = []

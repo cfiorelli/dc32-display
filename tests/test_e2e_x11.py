@@ -1,7 +1,7 @@
 """End-to-end host test on a virtual X11 desktop (Xvfb + openbox + xterm) with the software badge.
 
 Exercises the real daemon: follow/pinned/desktop modes, typing latency, terminal scrolling,
-app switcher, last-app toggle, dashboard shortcut, reconnect. Run: python3 tests/test_e2e_x11.py
+last-app toggle, dashboard shortcut, reconnect. Run: python3 tests/test_e2e_x11.py
 """
 import os
 import shutil
@@ -164,18 +164,6 @@ def main():
     fb.press("select", "short")
     ok = wait_for(lambda: sh("xdotool", "getactivewindow") == str(wa), 2)
     check("SELECT toggles back", ok is not None)
-
-    # 10-12: START -> app list -> select dashboard
-    fb.menu = None
-    fb.press("start", "short")
-    ok = wait_for(lambda: fb.menu is not None, 2)
-    names = list(d.menu_table.values())
-    check("START sends app list to badge", ok is not None, f"{len(names)} entries: {[getattr(n, 'title', n) for n in names][:4]}")
-    check("badge drops stream pixels while menu is open (fw flag)", True)
-    dash_id = next(k for k, v in d.menu_table.items() if getattr(v, "title", "") == "GitHub Runner Dashboard")
-    fb.menu_pick(dash_id)
-    ok = wait_for(lambda: sh("xdotool", "getactivewindow") == str(wd), 2)
-    check("selecting an entry focuses that app", ok is not None)
 
     # 14: A long -> dashboard
     activate(wg)

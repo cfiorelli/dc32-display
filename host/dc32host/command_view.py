@@ -14,8 +14,6 @@ from .runner_view import BG, INK, INK2, MUTED, GRID, HOSTED, _ttf
 COMMANDS = [
     ("Mirror screen", "view_mirror"),
     ("Runner costs", "view_runner"),
-    ("Needs-you report", "view_report"),
-    ("Backlog", "view_backlog"),
     ("Identify LEDs", "leds_identify"),
     ("Flipper Zero", "flipper"),
     ("Spectrum / SDR", "sdr_view"),

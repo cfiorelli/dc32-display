@@ -1,4 +1,4 @@
-"""Attention lights: file -> LED frames and the report screen. Headless; render PNGs with --render."""
+"""Attention lights: file -> LED frames. Headless."""
 from pathlib import Path
 import datetime as dt
 import json
@@ -101,13 +101,6 @@ class Attention(unittest.TestCase):
         self.assertTrue(A.load(write({'at': 'garbage', 'indicators': []}), now=NOW)['stale'])
         self.assertTrue(A.load(write(doc(-3600)), now=NOW)['stale'])      # clock far in the future
 
-    def test_lights_mode(self):
-        self.assertIn('attention', L.MODES)
-        self.assertEqual(set(L.MODES), set(L.LABELS))
-        st = A.load(write(FIXTURES['two']), now=NOW)
-        f = L.Lights('attention').frame(1.0, None, st, A.DEFAULT_LEDS)
-        self.assertEqual(len(f), L.N)
-        self.assertEqual(len(L.Lights('attention').frame(1.0)), L.N)    # no data: stale blink, never an error
 
     def test_identify_sequence(self):
         seen = [A.identify_frame(100.0, 100.0 + k * A.IDENTIFY_S + 0.1)[1] for k in range(A.N_LEDS)]
@@ -116,217 +109,8 @@ class Attention(unittest.TestCase):
         self.assertIsNone(idx)
         self.assertEqual(A.render_identify(4).shape, (240, 320, 3))
 
-    def test_render_states(self):
-        imgs = {}
-        for name, obj in FIXTURES.items():
-            imgs[name] = A.render(A.load(write(obj), now=NOW), now=NOW)
-            self.assertEqual(imgs[name].shape, (240, 320, 3))
-        self.assertFalse((imgs['none'] == imgs['two']).all())
-        self.assertFalse((imgs['none'] == imgs['stale']).all())
-        self.assertEqual(A.render({'stale': True, 'age': None, 'indicators': []}).shape, (240, 320, 3))
-
-
-def text_pixels(state, side, now=NOW):
-    """Pixels the given column's text changes: the full render minus the same render with that side's text blanked."""
-    full = A.render(state, now=now)
-    blank = dict(state, indicators=[dict(i, label=' ', reason='', tag=None) if A.DEFAULT_SLOTS[i['id']].startswith(side) else i
-                                    for i in state['indicators']])
-    return (full != A.render(blank, now=now)).any(axis=2)
-
-
-class Columns(unittest.TestCase):
-    def test_left_and_right_text_never_meet(self):
-        for name, obj in FIXTURES.items():
-            st = A.load(write(obj), now=NOW)
-            left, right = text_pixels(st, 'left'), text_pixels(st, 'right')
-            for y in range(left.shape[0]):
-                lx, rx = np.flatnonzero(left[y]), np.flatnonzero(right[y])
-                if len(lx) and len(rx):
-                    self.assertGreaterEqual(rx.min() - lx.max(), 8, '%s row %d' % (name, y))
-            # and per slot row band (same y range), so a glyph taller than its row cannot clip a neighbour
-            for lo, hi in ((0, 60), (130, 190), (196, 240)):
-                lx, rx = np.flatnonzero(left[lo:hi].any(axis=0)), np.flatnonzero(right[lo:hi].any(axis=0))
-                if len(lx) and len(rx):
-                    self.assertGreaterEqual(rx.min() - lx.max(), 8, '%s band %d' % (name, lo))
-
-    def test_tag_and_descriptor_share_a_baseline_and_size(self):
-        boxes = []
-        A.render(A.load(write(FIXTURES['api']), now=NOW), now=NOW, boxes=boxes)
-        pri = sorted((b for b in boxes if b[0] == 'right' and 150 < b[2] < 170), key=lambda b: b[1])   # priority_blocked descriptor row
-        self.assertEqual(len(pri), 2, pri)                       # tag, reason (the label sits above)
-        tag, reason = pri
-        self.assertEqual(tag[4], reason[4])                      # same bottom: no descenders in "API"/"API limits", so the baseline
-        self.assertGreaterEqual(reason[4] - reason[2], 10)       # taller than the old 11 px text
-        self.assertEqual(A.TAG_RGB['API'], (0xff, 0x87, 0xd7))
-
-    def test_recorded_boxes_stay_in_their_column(self):
-        for name, obj in FIXTURES.items():
-            boxes = []
-            A.render(A.load(write(obj), now=NOW), now=NOW, boxes=boxes)
-            for side, x0, y0, x1, y1 in boxes:
-                if side == 'left':
-                    self.assertTrue(22 <= x0 and x1 <= 22 + A.L1W + 2, (name, side, x0, x1))
-                else:
-                    self.assertTrue(320 - 22 - A.L1W - 2 <= x0 and x1 <= 320 - 22 + 2, (name, side, x0, x1))
-            for lo, hi in ((0, 60), (130, 190), (196, 240)):
-                lefts = [b[3] for b in boxes if b[0] == 'left' and lo <= b[2] < hi]; rights = [b[1] for b in boxes if b[0] == 'right' and lo <= b[2] < hi]
-                if lefts and rights:
-                    self.assertGreaterEqual(min(rights) - max(lefts), 8, (name, lo))
-
-    def test_counts_only_above_one(self):
-        def texts(obj):
-            seen = []
-            orig = A.ImageDraw.ImageDraw.text
-            A.ImageDraw.ImageDraw.text = lambda self, xy, text, *a, **k: (seen.append(str(text)), orig(self, xy, text, *a, **k))[1]
-            try:
-                A.render(A.load(write(obj), now=NOW), now=NOW)
-            finally:
-                A.ImageDraw.ImageDraw.text = orig
-            return seen
-        t = texts(FIXTURES['counts'])
-        for want in ('2R', '3Y', '1R', '1Y'):
-            self.assertIn(want, t)
-        self.assertEqual([x for x in t if x[-1:] in 'RY' and x[:-1].isdigit()].count('1Y'), 1)    # capacity 1R+1Y only; production (1 item) draws none
-        self.assertFalse([x for x in texts(FIXTURES['longest']) if x[-1:] in 'RY' and x[:-1].isdigit()], 'one item per light: no counts')
-
-    def test_only_descriptor_and_label_are_drawn(self):
-        seen = []
-        orig = A.ImageDraw.ImageDraw.text
-        A.ImageDraw.ImageDraw.text = lambda self, xy, text, *a, **k: (seen.append(str(text)), orig(self, xy, text, *a, **k))[1]
-        try:
-            for obj in FIXTURES.values():
-                A.render(A.load(write(obj), now=NOW), now=NOW)
-        finally:
-            A.ImageDraw.ImageDraw.text = orig
-        for gone in ('needs you', 'need you', 'all clear'):
-            self.assertNotIn(gone, seen)
-        self.assertFalse([t for t in seen if t in ('3h', '3 h')], 'age next to a label is gone')
-
-    def test_since_is_not_drawn(self):
-        a = FIXTURES['longest']
-        b = json.loads(json.dumps(a))
-        for i in b['indicators']:
-            i['since'] = None
-        self.assertTrue((A.render(A.load(write(a), now=NOW), now=NOW) == A.render(A.load(write(b), now=NOW), now=NOW)).all())
-
-    def test_spend_descriptor_shows_unlit(self):
-        quiet = FIXTURES['spend_low']
-        bare = json.loads(json.dumps(quiet))
-        for i in bare['indicators']:
-            i['reason'] = ''
-        self.assertFalse((A.render(A.load(write(quiet), now=NOW), now=NOW) == A.render(A.load(write(bare), now=NOW), now=NOW)).all())
-        self.assertEqual(A.lit_leds(A.load(write(quiet), now=NOW), A.DEFAULT_LEDS), set())
-
-    def test_tag_colour_follows_the_dashboard(self):
-        self.assertEqual(set(A.TAG_RGB), {'Lab', 'Ops', 'API', 'Eng'})
-        im = A.render(A.load(write(FIXTURES['api']), now=NOW), now=NOW)
-        self.assertTrue(((im == np.array(A.TAG_RGB['API'])).all(axis=2)).any())
-
-    def test_stale_hides_descriptors(self):
-        quiet = dict(FIXTURES['spend_low'], at=iso(25 * 60))
-        bare = json.loads(json.dumps(quiet))
-        for i in bare['indicators']:
-            i['reason'] = ''
-        self.assertTrue((A.render(A.load(write(quiet), now=NOW), now=NOW) == A.render(A.load(write(bare), now=NOW), now=NOW)).all())
-
-
-ORDER = {'stages': [
-    {'id': 1, 'name': 'Current work', 'state': 'active'},
-    {'id': 2, 'name': 'Sample client', 'state': 'blocked', 'blocked_short': 'needs account'},
-    {'id': 3, 'name': 'Local dashboard', 'state': 'next'},
-    {'id': 4, 'name': 'Next project', 'state': 'later'},
-    {'id': 5, 'name': 'Stage five with a name too long to fit the row', 'state': 'next'},
-]}
-EXTRA = [{'tag': 'Lab', 'short': 'Review notes'}, {'tag': 'Eng', 'short': 'Demo copy'}, {'tag': 'API', 'short': 'API limits'}]
-
-
-class Backlog(unittest.TestCase):
-    def test_renders_live_shape_and_eight_items(self):
-        for order, extra in ((ORDER, []), (ORDER, EXTRA), (ORDER, EXTRA * 2), (None, []), ({'stages': []}, None)):
-            self.assertEqual(A.render_backlog(order, extra).shape, (240, 320, 3))
-
-    def test_rows_fit_and_blocked_reason_shows(self):
-        boxes = []
-        A.render_backlog(ORDER, EXTRA, boxes=boxes)
-        self.assertEqual(len(boxes), 8)
-        for _, x0, y0, x1, y1 in boxes:
-            self.assertTrue(28 <= x0 and x1 <= 320 - 12 and y1 <= 240, (x0, y0, x1, y1))
-        self.assertFalse((A.render_backlog(ORDER) == A.render_backlog({'stages': [dict(s, state='next') for s in ORDER['stages']]})).all())
-
-    def test_loads_order_file(self):
-        self.assertEqual(A.load_order(write(ORDER))['stages'][1]['name'], 'Sample client')
-        self.assertIsNone(A.load_order('/nonexistent/eng-order.json'))
-        self.assertEqual(A.load(write(dict(doc(40), backlog=EXTRA)), now=NOW)['backlog'], EXTRA)
-
 
 BLUE = doc(40, {'capacity': 'Claude bal: 60%'}, levels={'capacity': 'blue'}, counts={'capacity': {'red': 0, 'yellow': 0, 'blue': 1}})
-MIXED = doc(40, {'capacity': 'Codex bal: 4%', 'priority_blocked': 'Lab build'}, {'priority_blocked': 'Ops'}, levels={'capacity': 'yellow'},
-            counts={'capacity': {'red': 0, 'yellow': 1, 'blue': 1}})
-
-
-def seg_doc(segments, level='yellow', lit=True, counts=None):
-    d = doc(40, {'capacity': ' '.join(t for t, _ in segments)} if lit else {}, levels={'capacity': level}, quiet=None if lit else {'capacity': ' '.join(t for t, _ in segments)},
-            counts={'capacity': counts or {'red': 0, 'yellow': int(level == 'yellow'), 'blue': 0}})
-    for i in d['indicators']:
-        if i['id'] == 'capacity':
-            i['segments'] = [{'t': t, 'level': lv} for t, lv in segments]
-    return d
-
-
-class Segments(unittest.TestCase):
-    CASES = {
-        'today': ([('Cl 30%', 'neutral'), ('Cx 4%', 'yellow')], 'yellow'),
-        'red': ([('Cl 15%', 'red'), ('Cx 80%', 'neutral')], 'red'),
-        'blue_yellow': ([('Cl 60%', 'blue'), ('Cx 4%', 'yellow')], 'yellow'),
-        'widest': ([('Cl 100%', 'blue'), ('Cx 100%', 'blue')], 'blue'),
-    }
-
-    def colours_in_descriptor_row(self, name):
-        segs, level = self.CASES[name]
-        im = A.render(A.load(write(seg_doc(segs, level)), now=NOW), now=NOW)
-        band = im[150:178, 22:152]                  # AI usage descriptor (left_middle: y 140 + 31 baseline), column 22..152
-        return {lv: bool((band == np.array(A.LEVEL_SCREEN[lv])).all(axis=2).any()) for lv in ('red', 'yellow', 'blue')}, \
-               bool((band == np.array(A.TH_SOFT)).all(axis=2).any())
-
-    def test_each_segment_in_its_own_colour(self):
-        found, soft = self.colours_in_descriptor_row('today')
-        self.assertEqual((found['yellow'], found['red'], found['blue'], soft), (True, False, False, True))     # Cl neutral (soft), Cx yellow
-        found, soft = self.colours_in_descriptor_row('red')
-        self.assertEqual((found['red'], found['yellow'], soft), (True, False, True))
-        found, soft = self.colours_in_descriptor_row('blue_yellow')
-        self.assertEqual((found['blue'], found['yellow'], soft), (True, True, False))
-
-    def test_segment_boxes_are_separate_runs_in_order(self):
-        boxes = []
-        A.render(A.load(write(seg_doc(*self.CASES['today'])), now=NOW), now=NOW, boxes=boxes)
-        runs = sorted((b for b in boxes if b[0] == 'left' and 150 < b[2] < 178), key=lambda b: b[1])
-        self.assertEqual(len(runs), 2)
-        self.assertLess(runs[0][3], runs[1][1])                  # Claude segment left of the Codex segment, with a gap
-
-    def test_widest_descriptor_fits_the_column_and_keeps_the_gap(self):
-        boxes = []
-        d = seg_doc(*self.CASES['widest'])
-        d['indicators'] = [dict(i, label=i['label']) for i in d['indicators']]
-        for i in d['indicators']:
-            if i['id'] == 'priority_blocked':                    # right_middle, same row band: the worst neighbour
-                i.update(lit=True, level='red', reason='W' * 12, tag='Lab', counts={'red': 12, 'yellow': 0, 'blue': 0})
-        A.render(A.load(write(d), now=NOW), now=NOW, boxes=boxes)
-        lefts = [b for b in boxes if b[0] == 'left' and 130 <= b[2] < 190]
-        rights = [b for b in boxes if b[0] == 'right' and 130 <= b[2] < 190]
-        self.assertTrue(lefts and rights)
-        self.assertTrue(all(b[3] <= 22 + A.COLW for b in lefts), lefts)
-        self.assertGreaterEqual(min(b[1] for b in rights) - max(b[3] for b in lefts), 8)
-
-    def test_unlit_both_neutral_still_shows_the_descriptor(self):
-        d = seg_doc([('Cl 40%', 'neutral'), ('Cx 80%', 'neutral')], level=None, lit=False)
-        im = A.render(A.load(write(d), now=NOW), now=NOW)
-        self.assertTrue(((im[150:178, 22:152] == np.array(A.TH_SOFT)).all(axis=2)).any())
-        self.assertEqual(A.lit_leds(A.load(write(d), now=NOW), A.DEFAULT_LEDS), set())
-
-    def test_stale_hides_segments(self):
-        d = dict(seg_doc(*self.CASES['today']), at=iso(25 * 60))
-        im = A.render(A.load(write(d), now=NOW), now=NOW)
-        self.assertFalse(((im[150:178, 22:152] == np.array(A.LEVEL_SCREEN['yellow'])).all(axis=2)).any())
 
 
 class Blue(unittest.TestCase):
@@ -335,26 +119,7 @@ class Blue(unittest.TestCase):
         f = A.frame(0.0, st, A.DEFAULT_LEDS)
         self.assertEqual(f[A.DEFAULT_LEDS['capacity']], (0, 0, 255))
         self.assertNotIn(A.LEVEL_LED['blue'], (A.STALE_RGB, A.LEVEL_LED['red'], A.LEVEL_LED['yellow']))
-        # distinct from the screen's all-clear cyan border colour
-        self.assertGreater(sum(abs(a - b) for a, b in zip(A.LEVEL_SCREEN['blue'], A.TH_CYAN)), 100)
 
-    def test_counts_draw_1y_1b(self):
-        seen = []
-        orig = A.ImageDraw.ImageDraw.text
-        A.ImageDraw.ImageDraw.text = lambda self, xy, text, *a, **k: (seen.append(str(text)), orig(self, xy, text, *a, **k))[1]
-        try:
-            A.render(A.load(write(MIXED), now=NOW), now=NOW)
-        finally:
-            A.ImageDraw.ImageDraw.text = orig
-        self.assertIn('1Y', seen)
-        self.assertIn('1B', seen)
-        self.assertNotIn('1R', seen)
-
-    def test_count_and_border_colour_follow_the_worst_level(self):
-        im = A.render(A.load(write(BLUE), now=NOW), now=NOW)
-        self.assertTrue((im == np.array(A.LEVEL_SCREEN['blue'])).all(axis=2).any())          # the big count and the lit dot
-        im = A.render(A.load(write(MIXED), now=NOW), now=NOW)
-        self.assertTrue((im == np.array(A.LEVEL_SCREEN['yellow'])).all(axis=2).any())        # yellow outranks blue
 
     def test_blue_pulse_peak_matches_red_at_1_and_25_percent(self):
         for pct, peak in ((1, (0, 0, 2)), (25, (0, 0, 63))):
@@ -370,12 +135,6 @@ class Blue(unittest.TestCase):
     def test_blue_pulses_when_flagged(self):
         d = dict(BLUE); d['indicators'] = [dict(i, pulse=True) for i in BLUE['indicators']]
         self.assertEqual(A.pulse_leds(A.load(write(d), now=NOW), A.DEFAULT_LEDS), {A.DEFAULT_LEDS['capacity']})
-
-
-FIXTURES['seg_today'] = seg_doc(*Segments.CASES['today'])
-FIXTURES['seg_widest'] = seg_doc(*Segments.CASES['widest'])
-FIXTURES['blue'] = BLUE
-FIXTURES['blue_mixed'] = MIXED
 
 
 def pdoc(pulses, lit=('priority_blocked', 'production', 'spend', 'capacity', 'pr_waiting')):
@@ -480,28 +239,5 @@ class Pulse(unittest.TestCase):
         self.assertEqual(seen, {(0, 0, 0), (1, 0, 0), (2, 0, 0)})
 
 
-def render_all(outdir):
-    from PIL import Image
-    for name, obj in FIXTURES.items():
-        im = Image.fromarray(A.render(A.load(write(obj), now=NOW), now=NOW)).resize((640, 480), Image.NEAREST)
-        im.save(Path(outdir) / f'attention-{name}.png')
-        st = A.load(write(obj), now=NOW)
-        led_strip(A.frame(0.0, st, A.DEFAULT_LEDS)).save(Path(outdir) / f'attention-leds-{name}.png')
-
-
-def led_strip(cols):
-    """The 9 LED values as a row of discs labelled with their index (white-blink frame for stale)."""
-    from PIL import Image, ImageDraw
-    im = Image.new('RGB', (9 * 60, 80), (20, 20, 20))
-    d = ImageDraw.Draw(im)
-    for i, c in enumerate(cols):
-        d.ellipse([i * 60 + 8, 8, i * 60 + 52, 52], fill=c if c != (0, 0, 0) else (45, 45, 45))
-        d.text((i * 60 + 26, 60), str(i), fill=(200, 200, 200))
-    return im
-
-
 if __name__ == '__main__':
-    if '--render' in sys.argv:
-        render_all(Path(__file__).resolve().parents[1] / 'docs' / 'img')
-    else:
-        unittest.main()
+    unittest.main()

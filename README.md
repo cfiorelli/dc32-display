@@ -4,7 +4,7 @@
 
 Turns a **DEF CON 32 Badge** (RP2350, 320×240 LCD) into a live USB mini-display and
 controller for a Linux PC. It mirrors the app you're using (and follows your typing at 1:1, so text
-is readable), has a badge-native home menu and app switcher, and can show a badge-native GitHub
+is readable), has a badge-native home menu, and can show a badge-native GitHub
 Actions runner cost view.
 
 ```
@@ -25,13 +25,14 @@ Both are drawn natively at the badge's 320×240 (shown here at 2×; the runner v
 
 | Control | Action |
 |---|---|
-| **FN** (center) tap | home menu: Mirror screen · Runner costs · Badge terminal · Switch app · Zoom · Open dashboard on PC · Pause · Shortcuts · Status info |
+| **FN** (center) tap | home menu: Screens (Engineering mgmt · Machine) · Zoom · Pause · Shortcuts · Status info |
 | **A** tap | zoom: fit → 2:1 → 1:1 (zoomed views follow your typing or the mouse) |
 | **A** hold | runner cost view on/off |
 | **B** tap | back to fit (and back/cancel in menus) |
 | **SELECT** tap | switch to the previous app (tap again to come back) |
 | **SELECT** hold | cycle display mode: Follow active → Pinned → Whole desktop |
-| **START** tap | app switcher (Up/Down move, **A** focus, **RIGHT** pin to badge without changing PC focus, **B** cancel) |
+| **START** tap twice | switch the badge off or on (while off, nothing else wakes it) |
+| **D-pad left/right** | Machine: badge terminal ↔ whole PC screen. Engineering mgmt: next view |
 | **START** hold | pin the app currently shown |
 | **D-pad** | move the zoomed view. It never sends keys to the PC |
 | **FN + B** | info overlay: mode, app, FPS, throughput, latency, versions |
@@ -49,14 +50,14 @@ All mappings live in `~/.config/dc32-display/config.json` (`"buttons"`).
 
 | Keys | Action |
 |---|---|
-| Ctrl+Alt+B | runner cost view ↔ needs-you report (screen mirroring: FN menu or **B**) |
+| Ctrl+Alt+B | runner cost view on/off |
 | Ctrl+Alt+H | cheat sheet of every shortcut, on the badge |
 | Ctrl+Alt+Z / Ctrl+Alt+X | zoom cycle / fit |
 | Ctrl+Alt+I / J / K / L | move the badge view up / left / down / right |
 | Ctrl+Alt+Up / Down | light level up / down (1-100%; the installer frees these two combos from GNOME's workspace up/down) |
-| Ctrl+Alt+G | next light mode (attention is the default) |
+| Ctrl+Alt+G | next light mode (off is the default) |
 
-Any action can be sent from a script: `dc32host ctl <action>` (e.g. `toggle_runner`, `toggle_report`, `leds_identify`, `led_brightness:25`, `home_menu`,
+Any action can be sent from a script: `dc32host ctl <action>` (e.g. `toggle_runner`, `leds_identify`, `led_brightness:25`, `home_menu`,
 `zoom_cycle`, `pan_left`, `toggle_pause`). `dc32host restart` restarts (or starts) the service.
 
 ## Setup (Ubuntu, X11 session)
@@ -191,11 +192,11 @@ RESTORE.md  how to put the badge back exactly as it was
 MIT (see `LICENSE`), except the Unifont-derived glyph data in `firmware/src/font8x16.h` (OFL-1.1).
 Not affiliated with DEF CON.
 
-## Attention lights and report
+## Attention lights
 
 The badge's five front LEDs show whether anything needs you, one signal each; **off = nothing for you,
 lit = it needs you. Red = act now, yellow = heads-up.** Default level 25% (FN + Up/Down or Ctrl+Alt+Up/Down
-change it). The light mode is `attention` (the default; Ctrl+Alt+G cycles the others). A separate process
+change it). **These lights are currently disabled**: the `attention` light mode was removed and the default is `off`. A separate process
 writes `~/.cache/dc32-display/attention.json`; the daemon only reads it:
 
 ```json
@@ -213,15 +214,9 @@ writes `~/.cache/dc32-display/attention.json`; the daemon only reads it:
 | right low (A/B) | Prod + tests | production health failing | a test machine unreachable 10+ min |
 
 If the file is missing, unreadable, or older than `attention_stale_s` (10 min), **all the lights blink
-slowly white** and the report reads STALE, so a dead writer never looks like "all fine".
+slowly white**, so a dead writer never looks like "all fine".
 
-The **report** (Ctrl+Alt+B toggles it with the runner cost view, which is the start-up view) is drawn in
-the badge's style: each signal sits beside its LED with a circuit trace running to it, lit ones show a one-line
-reason and how long, and the centre shows how many need you. Mirroring stays reachable: **B**, or FN > Mirror
-screen, or the command menu (Ctrl+Alt+M).
-
-Config (`config.json`): `attention_leds` maps id -> LED index (0-8) and `attention_slots` maps id -> slot
-(`left_top`, `left_middle`, `left_low`, `right_middle`, `right_low`); unset means the defaults above, plus
+Config (`config.json`): `attention_leds` maps id -> LED index (0-8); unset means the defaults above, plus
 `attention_file`, `attention_stale_s`, `led_brightness_pct`, `default_view`. Left top and left middle (LED 0
 and 2) are inferred; if two look swapped, `dc32host ctl leds_identify` lights LED 0..8 for 3 s each with the
 number on screen, then set `attention_leds`. Calling it again stops it.

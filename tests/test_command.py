@@ -33,13 +33,11 @@ class Nav(unittest.TestCase):
     def test_arrows_enter_esc(self):
         d = self.stub()
         D.Daemon.action(d, 'cmdkey:Down')
-        D.Daemon.action(d, 'cmdkey:Down')
-        self.assertEqual(d.cmd.sel, 2)
-        self.assertEqual(d.cmd.action(), CV.COMMANDS[2][1])     # a real action name
+        self.assertEqual(d.cmd.sel, 1)
+        self.assertEqual(d.cmd.action(), CV.COMMANDS[1][1])     # a real action name
         # Enter on a view command routes through set_view
-        want = CV.COMMANDS[2][1]
         D.Daemon.action(d, 'cmdkey:Return')
-        # the action either changed the view or stayed (adjust); for COMMANDS[2]=flipper it opens a view
+        # the action either changed the view or stayed (adjust); COMMANDS[1] opens the runner view
         self.assertTrue(d.viewed or d.view != 'cmd')
         d2 = self.stub()
         D.Daemon.action(d2, 'cmdkey:Escape')

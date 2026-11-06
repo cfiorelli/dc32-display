@@ -74,13 +74,13 @@ class HealthTest(unittest.TestCase):
             host = daemon.Daemon.__new__(daemon.Daemon)
             import queue
             host.ctl_q = queue.Queue()
-            host.ctl_q.put('toggle_report')
+            host.ctl_q.put('toggle_runner')
             seen = []
             host.action = seen.append
             before = time.monotonic()
             data.snapshot()
             host.run_control()
-            self.assertEqual(seen, ['toggle_report'])
+            self.assertEqual(seen, ['toggle_runner'])
             self.assertLess(time.monotonic()-before, .2)
         finally:
             release.set()

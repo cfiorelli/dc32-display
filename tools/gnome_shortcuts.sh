@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # GNOME keyboard shortcuts for the badge (user-level, no sudo). Re-running is safe; --remove undoes them.
-#   Ctrl+Alt+B        runner costs view <-> needs-you report (screen mirroring: FN menu, or B)
+#   Ctrl+Alt+B        runner costs view on/off
 #   Ctrl+Alt+H        cheat sheet of all shortcuts on the badge (number keys run them while it's open)
 #   Ctrl+Alt+R        refresh the runner dashboard's GitHub data now
 #   Ctrl+Alt+P        Doom II, mirrored on the badge (install: tools/install_doom.sh)
@@ -23,7 +23,7 @@ SCHEMA=org.gnome.settings-daemon.plugins.media-keys
 BASE=/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings
 BIN="$HOME/.local/bin/dc32host"
 KEYS=(
-  "dc32-runner|DC32 badge: runner costs <-> needs-you report|<Primary><Alt>b|toggle_report"
+  "dc32-runner|DC32 badge: runner costs on/off|<Primary><Alt>b|toggle_runner"
   "dc32-help|DC32 badge: shortcut cheat sheet|<Primary><Alt>h|toggle_help"
   "dc32-refresh|DC32 badge: refresh runner data now|<Primary><Alt>r|refresh_data"
   "dc32-doom2|DC32 badge: play Doom II (mirrored)|<Primary><Alt>p|doom2"
