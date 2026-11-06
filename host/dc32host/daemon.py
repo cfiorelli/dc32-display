@@ -1417,6 +1417,8 @@ class Daemon:
         self.dimmed = False
         self.last_badge_input = time.time()
         self._leds_last = None
+        if self.cfg.get("reset_view_on_connect", True):   # badge power-on shows the default view, not the last one
+            self.set_view(self.cfg.get("default_view") or "mirror")
         self.send(P.set_brightness(self.brightness) + P.set_timing(int(self.cfg.get("long_press_ms", 600)), 400, 90)
                   + P.set_tap(int(self.cfg.get("tap_threshold", 12)) if self.cfg.get("tap_sleep", True) else 0)
                   + P.set_sd_write(bool(self.cfg.get("sd_writable", False)))
