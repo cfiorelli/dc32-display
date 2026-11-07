@@ -255,10 +255,9 @@ class RunnerData:
             return self.v, dict(self.local), self.error, self.updated
 
 
-def saved_30d(m, st, now, rates):
-    """List-price cost of the self-hosted jobs that started in the last 30 days, i.e. what they
+def saved_between(m, st, now, rates, since, until):
+    """List-price cost of the self-hosted jobs that started in [since, until), i.e. what they
     would have cost on GitHub-hosted runners. Rates come from the billing data (Linux $0.006/min)."""
-    since = now - dt.timedelta(days=30)
     with st.lock:
         jobs = dict(st.jobs)
     seen, total = set(), 0.0
@@ -273,7 +272,7 @@ def saved_30d(m, st, now, rates):
                     or j.get("conclusion") == "skipped"):
                 continue
             ts = m.parse_ts(j.get("started_at"))
-            if ts and ts >= since:
+            if ts and since <= ts < until:
                 total += m.billed_minutes(m.job_seconds(j, now) or 0) * rates.get(typ, m.FALLBACK_RATE.get(typ, 0.0))
     return total
 
@@ -282,9 +281,14 @@ def _compute(m, st):
     now = dt.datetime.now(m.UTC)
     v = m.compute(st, now)
     try:
-        v["saved30"] = saved_30d(m, st, now, v.get("rates") or {})
+        mstart, mend, _ = m.month_bounds(st.year, st.month)
+        last = mstart - dt.timedelta(days=1)
+        lstart, lend, _ = m.month_bounds(last.year, last.month)
+        rates = v.get("rates") or {}
+        v["saved_month"] = saved_between(m, st, now, rates, mstart, mend)
+        v["saved_last_month"] = (lstart.strftime("%b"), saved_between(m, st, now, rates, lstart, lend))
     except Exception as e:              # an older dashboard module without the helpers
-        log.debug("30-day savings unavailable: %s", e)
+        log.debug("monthly savings unavailable: %s", e)
     return v
 
 
@@ -427,14 +431,14 @@ class RunnerView:
         d.line([0, 180, W, 180], fill=GRID)
 
         # Footer, two compact lines:
-        #   $12.34 saved, rolling 30d              what self-hosted minutes would have cost on GitHub
+        #   $12.34 saved this month, Oct $56            what self-hosted minutes would have cost on GitHub
         #   $0.00 of $250, resets 24d  next 28m    billed Actions spend this cycle (GitHub blue)
-        saved = (v or {}).get("saved30")
+        saved = (v or {}).get("saved_month")
         x = 8
         if saved is not None:
             amt = _money(saved)
             d.text((x, 186), amt, font=self.f_mid, fill=SELF)
-            d.text((x + d.textlength(amt, font=self.f_mid) + 6, 191), "saved, rolling 30d", font=self.f_s, fill=INK2)
+            d.text((x + d.textlength(amt, font=self.f_mid) + 6, 191), self.saved_label(v), font=self.f_s, fill=INK2)
         amount = _money(v.get("actions_net", 0)) if v and same_month and v.get("billing_ok", True) else "$—"
         budget = (v or {}).get("budget")
         label = (f"of ${budget['amount']:,.0f}, resets {cycle_days_left(now)}d" if budget
@@ -449,6 +453,11 @@ class RunnerView:
             if sx > lx + d.textlength(label, font=self.f_s) + 8:
                 d.text((sx, y + 4), sched, font=self.f_s, fill=MUTED)
         return np.asarray(img).copy()
+
+    @staticmethod
+    def saved_label(v):
+        last = v.get("saved_last_month")
+        return "saved this month" + (f", {last[0]} {_money(last[1])}" if last else "")
 
     def schedule_text(self, v, now):
         """When the GitHub numbers next change: 'updating...' or 'next 28m' (nothing overnight)."""

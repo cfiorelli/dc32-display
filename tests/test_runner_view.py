@@ -121,7 +121,7 @@ class RunnerViewTest(unittest.TestCase):
         self.assertFalse(any(term in ' '.join(texts).lower() for term in ('saved','12h','list price','paused')))
 
     def test_footer_savings_line_above_spend(self):
-        data=Snapshot('idle');data.fixture['v']['saved30']=12.5
+        data=Snapshot('idle');data.fixture['v']['saved_month']=12.5;data.fixture['v']['saved_last_month']=('Oct',412.0)
         seen=[];draw_text=rv.ImageDraw.ImageDraw.text
         def record(draw,xy,text,*a,**kw):
             seen.append((text,xy[1]));return draw_text(draw,xy,text,*a,**kw)
@@ -129,7 +129,7 @@ class RunnerViewTest(unittest.TestCase):
             view(data).render(now=data.fixture['now'])
         ys=dict(seen)
         self.assertLess(ys['$12.50'],ys['$24.62'])
-        self.assertIn('saved, rolling 30d',ys)
+        self.assertIn('saved this month, Oct $412.00',ys)
         self.assertTrue(any(k.startswith('of $250, resets ') for k in ys))
         self.assertTrue(all(y<=226 for _,y in seen))
 
